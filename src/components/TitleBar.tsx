@@ -42,33 +42,35 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
     return () => unlisten?.();
   }, []);
 
+  // Explicit startDragging — more reliable than data-tauri-drag-region in Tauri v2
+  const handleDragRegionMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    // Don't drag if clicking an interactive element
+    if (target.closest("button, a, input, select")) return;
+    win.startDragging();
+  };
+
   const activeGroup = modeGroup(canvasState.mode);
   const statusLabel = stateLabel(canvasState);
 
   return (
     <div className="title-bar">
-      {/* drag region — wordmark */}
+      {/* drag region — wordmark + spacer */}
       <div
-        className="flex items-center gap-2 pl-4 pr-3 h-full"
-        data-tauri-drag-region
+        className="flex items-center gap-2 pl-4 pr-3 h-full flex-1 cursor-move"
+        onMouseDown={handleDragRegionMouseDown}
       >
-        {/* brand mark */}
-        <span className="w-[6px] h-[6px] rounded-sm bg-accent inline-block shrink-0" data-tauri-drag-region />
-        <span
-          className="text-[11px] font-bold tracking-[0.18em] text-text-primary uppercase"
-          data-tauri-drag-region
-        >
+        <span className="w-[6px] h-[6px] rounded-sm bg-accent inline-block shrink-0 pointer-events-none" />
+        <span className="text-[11px] font-bold tracking-[0.18em] text-text-primary uppercase pointer-events-none">
           ANDRII
         </span>
         {statusLabel && (
-          <span className="text-[11px] text-text-muted" data-tauri-drag-region>
+          <span className="text-[11px] text-text-muted pointer-events-none">
             · {statusLabel}
           </span>
         )}
       </div>
-
-      {/* spacer */}
-      <div className="flex-1 h-full" data-tauri-drag-region />
 
       {/* navigation */}
       <div className="flex items-center gap-0.5 px-2">
