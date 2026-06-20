@@ -61,19 +61,21 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
   };
 
   return (
-    <div className="canvas">
+    <div className="canvas bg-surface">
       <div className="canvas-center px-10">
         <div className="w-full max-w-sm space-y-6">
+          {/* Archive identity */}
           <div>
-            <p className="font-mono text-sm text-text-secondary truncate mb-0.5">{archiveName}</p>
-            <p className="text-2xs text-text-muted font-mono truncate">{archivePath}</p>
+            <p className="font-mono text-base font-semibold text-text-primary truncate">{archiveName}</p>
+            <p className="text-xs text-text-muted font-mono truncate mt-0.5">{archivePath}</p>
           </div>
 
-          <div>
+          {/* Password */}
+          <div className="space-y-2">
             <div className="relative">
               <input
                 type={showPw ? "text" : "password"}
-                className="input w-full pr-8 text-base"
+                className="input pr-10 text-base"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -84,28 +86,30 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-secondary"
               >
-                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            {error && <p className="mt-2 text-2xs text-danger-text">{error}</p>}
+            {error && (
+              <p className="text-sm text-danger-text">{error}</p>
+            )}
           </div>
 
           <button
             onClick={handleUnlock}
             disabled={!password || loading}
-            className="btn-primary w-full py-2.5 text-sm"
+            className="btn-primary w-full py-3 text-sm"
           >
             {loading
-              ? <><Loader2 size={14} className="animate-spin" /> Unlocking…</>
+              ? <><Loader2 size={15} className="animate-spin" /> Unlocking…</>
               : "Unlock archive →"}
           </button>
         </div>
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onBack} className="btn-ghost text-text-muted text-xs">
+        <button onClick={onBack} className="btn-ghost text-sm text-text-muted">
           ← Back
         </button>
       </div>
@@ -125,13 +129,13 @@ interface UnlockedArchiveProps {
 type SortKey = "name" | "size" | "date";
 
 export function UnlockedArchive({ archivePath, password, info, onClose }: UnlockedArchiveProps) {
-  const [sortKey, setSortKey]   = useState<SortKey>("name");
-  const [sortAsc, setSortAsc]   = useState(true);
-  const [search, setSearch]     = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey]       = useState<SortKey>("name");
+  const [sortAsc, setSortAsc]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [extracting, setExtracting] = useState(false);
-  const [status, setStatus]     = useState<{ ok: boolean; msg: string } | null>(null);
-  const [showInfo, setShowInfo] = useState(true);
+  const [status, setStatus]         = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showInfo, setShowInfo]     = useState(true);
 
   const filtered = [...info.entries]
     .filter(e => basename(e.path).toLowerCase().includes(search.toLowerCase()))
@@ -185,29 +189,32 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
   };
 
   const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
-    <button onClick={() => toggleSort(k)} className="flex items-center gap-0.5 hover:text-text-primary transition-colors">
+    <button
+      onClick={() => toggleSort(k)}
+      className="flex items-center gap-0.5 text-text-muted hover:text-text-primary transition-colors"
+    >
       {label}
       {sortKey === k && (sortAsc ? <ChevronUp size={9} /> : <ChevronDown size={9} />)}
     </button>
   );
 
   return (
-    <div className="canvas">
+    <div className="canvas bg-surface">
       {/* archive info strip */}
       <div
-        className="px-10 py-3 border-b border-border/60 shrink-0 cursor-pointer select-none"
+        className="px-8 py-3 border-b border-border shrink-0 cursor-pointer"
         onClick={() => setShowInfo(!showInfo)}
       >
         <div className="flex items-center gap-2">
-          <ShieldCheck size={13} className="text-accent shrink-0" />
-          <span className="text-xs font-medium text-text-secondary flex-1 font-mono">{info.archive_name}</span>
-          <span className="text-2xs text-text-muted">
+          <ShieldCheck size={14} className="text-accent shrink-0" />
+          <span className="text-sm font-semibold text-text-primary flex-1 font-mono">{info.archive_name}</span>
+          <span className="text-xs text-text-muted">
             {info.file_count} files · {formatBytes(info.total_original_size)}
           </span>
-          {showInfo ? <ChevronUp size={11} className="text-text-muted" /> : <ChevronDown size={11} className="text-text-muted" />}
+          {showInfo ? <ChevronUp size={12} className="text-text-muted" /> : <ChevronDown size={12} className="text-text-muted" />}
         </div>
         {showInfo && (
-          <div className="mt-2 flex gap-6 text-2xs text-text-muted animate-fade-in">
+          <div className="mt-1.5 flex gap-5 text-xs text-text-muted animate-fade-in">
             <span>Created {formatDate(info.created_at)}</span>
             <span>Compression {info.compression}</span>
             <span>Archived {formatBytes(info.total_compressed_size)}</span>
@@ -216,52 +223,56 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
       </div>
 
       {/* toolbar */}
-      <div className="flex items-center gap-3 px-10 py-2 border-b border-border/40 shrink-0">
+      <div className="flex items-center gap-3 px-8 py-2.5 border-b border-border shrink-0">
         <input
           type="text"
-          className="input-box py-1 px-2 text-xs w-44"
-          placeholder="Filter…"
+          className="input-box py-1.5 px-3 text-xs w-44"
+          placeholder="Filter files…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
-        <span className="text-2xs text-text-muted">
+        <span className="text-xs text-text-muted">
           {filtered.length !== info.file_count ? `${filtered.length} of ` : ""}{info.file_count}
         </span>
-        <span className="text-2xs text-text-muted flex gap-3 ml-2">
+        <span className="flex gap-3 text-xs ml-1">
           <SortBtn k="name" label="Name" />
           <SortBtn k="size" label="Size" />
           <SortBtn k="date" label="Date" />
         </span>
         <div className="ml-auto flex items-center gap-2">
           {selected.size > 0 && (
-            <button onClick={() => handleExtract(false)} disabled={extracting} className="btn-secondary text-xs py-1 px-3 gap-1">
-              <ArrowDownToLine size={12} /> {selected.size}
+            <button onClick={() => handleExtract(false)} disabled={extracting} className="btn-secondary text-xs py-1.5 px-3 gap-1.5">
+              <ArrowDownToLine size={13} /> Extract {selected.size}
             </button>
           )}
-          <button onClick={() => handleExtract(true)} disabled={extracting} className="btn-primary text-xs py-1 px-3 gap-1">
+          <button onClick={() => handleExtract(true)} disabled={extracting} className="btn-primary text-xs py-1.5 px-3 gap-1.5">
             {extracting
-              ? <><Loader2 size={12} className="animate-spin" /> …</>
-              : <><ArrowDownToLine size={12} /> Extract all</>}
+              ? <><Loader2 size={13} className="animate-spin" /> …</>
+              : <><ArrowDownToLine size={13} /> Extract all</>}
           </button>
         </div>
       </div>
 
       {/* file table */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-10 py-1">
-          {/* select all row */}
+        <div className="px-8 py-1">
           <div className="file-row">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3 h-3 accent-accent" />
-            <span className="text-2xs text-text-muted flex-1">Select all</span>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleAll}
+              className="w-3.5 h-3.5 accent-accent rounded"
+            />
+            <span className="text-xs text-text-muted flex-1">Select all</span>
           </div>
           {filtered.map(entry => {
-            const name   = basename(entry.path);
-            const dir    = looksDir(entry);
+            const name    = basename(entry.path);
+            const dir     = looksDir(entry);
             const checked = selected.has(entry.path);
             return (
               <div
                 key={entry.path}
-                className={`file-row cursor-pointer ${checked ? "opacity-100" : ""}`}
+                className={`file-row cursor-pointer hover:bg-elevated/50 rounded-lg -mx-2 px-2 transition-colors`}
                 onClick={() => toggle(entry.path)}
               >
                 <input
@@ -269,16 +280,16 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
                   checked={checked}
                   onChange={() => toggle(entry.path)}
                   onClick={e => e.stopPropagation()}
-                  className="w-3 h-3 accent-accent shrink-0"
+                  className="w-3.5 h-3.5 accent-accent rounded shrink-0"
                 />
                 {dir
-                  ? <Folder size={13} className="text-accent/50 shrink-0" />
-                  : <File   size={13} className="text-text-muted shrink-0" />}
+                  ? <Folder size={14} className="text-warning shrink-0" />
+                  : <File   size={14} className="text-text-muted shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <div className="font-mono text-xs text-text-secondary truncate">{name}</div>
-                  <div className="text-2xs text-text-muted truncate leading-tight">{entry.path}</div>
+                  <div className="font-mono text-sm text-text-primary truncate">{name}</div>
+                  <div className="text-xs text-text-muted truncate leading-tight">{entry.path}</div>
                 </div>
-                <span className="font-mono text-2xs text-text-muted shrink-0 tabular-nums">
+                <span className="font-mono text-xs text-text-muted shrink-0 tabular-nums">
                   {dir ? "—" : formatBytes(entry.original_size)}
                 </span>
               </div>
@@ -289,18 +300,18 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
 
       {/* status strip */}
       {status && (
-        <div className={`px-10 py-2 border-t border-border/60 text-2xs flex items-center gap-2 shrink-0 ${
-          status.ok ? "text-accent" : "text-danger-text"
+        <div className={`px-8 py-2.5 border-t border-border text-xs flex items-center gap-2 shrink-0 ${
+          status.ok ? "text-success-text bg-success/5" : "text-danger-text bg-danger/5"
         }`}>
           <span className="flex-1 truncate">{status.msg}</span>
           <button onClick={() => setStatus(null)} className="text-text-muted hover:text-text-secondary">
-            <X size={12} />
+            <X size={13} />
           </button>
         </div>
       )}
 
       <div className="bottom-bar">
-        <button onClick={onClose} className="btn-ghost text-text-muted text-xs">
+        <button onClick={onClose} className="btn-ghost text-sm text-text-muted">
           Close
         </button>
       </div>

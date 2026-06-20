@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Archive } from "lucide-react";
+import { Shield, FolderOpen, ShieldCheck, Lock } from "lucide-react";
 
 import TitleBar from "./components/TitleBar";
 import SecurityReport from "./components/SecurityReport";
@@ -14,43 +15,139 @@ import type {
   CompressionLevel, OpenArchiveResponse,
 } from "./types";
 
-/* ── helpers ────────────────────────────────────────────────────────────── */
 function isAndrii(path: string) { return path.toLowerCase().endsWith(".andrii"); }
 
-/* ── Idle canvas ────────────────────────────────────────────────────────── */
-function IdleCanvas({ onBrowseFiles, onBrowseArchive }: {
+/* ── Idle Canvas — create flow ──────────────────────────────────────────── */
+function IdleCanvas({
+  isDragging, onBrowseFiles, onBrowseFolder, onBrowseArchive,
+}: {
+  isDragging: boolean;
   onBrowseFiles: () => void;
+  onBrowseFolder: () => void;
   onBrowseArchive: () => void;
 }) {
   return (
     <div className="canvas">
-      <div className="canvas-center px-10">
-        <div className="w-full max-w-lg">
-          {/* drop zone */}
-          <div className="border border-dashed border-border rounded animate-drop-pulse py-16 px-8 text-center mb-6">
-            <p className="text-base text-text-secondary font-medium mb-1">
-              Drop anything here
-            </p>
-            <p className="text-2xs text-text-muted">
-              Files and folders encrypt.&nbsp;&nbsp;Archives unlock.
-            </p>
-          </div>
+      <div className="flex-1 p-6">
+        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
+          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
+              ${isDragging ? "bg-accent text-white" : "bg-accent/10 text-accent"}`}>
+              <Shield size={32} strokeWidth={1.5} />
+            </div>
 
-          {/* browse links */}
-          <div className="flex items-center justify-center gap-2 text-xs text-text-muted">
-            <button
-              onClick={onBrowseFiles}
-              className="hover:text-text-secondary underline underline-offset-2 transition-colors"
-            >
-              Browse files
-            </button>
-            <span className="opacity-30">·</span>
-            <button
-              onClick={onBrowseArchive}
-              className="hover:text-text-secondary underline underline-offset-2 transition-colors"
-            >
-              Open archive
-            </button>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
+                {isDragging ? "Drop to protect" : "Drop files or folders here"}
+              </h2>
+              {!isDragging && (
+                <p className="text-sm text-text-muted leading-relaxed">
+                  Files become encrypted <span className="font-mono">.andrii</span> archives.<br />
+                  Only you can open them.
+                </p>
+              )}
+            </div>
+
+            {!isDragging && (
+              <>
+                <div className="flex items-center gap-3">
+                  <button onClick={onBrowseFiles} className="btn-secondary text-sm px-5 py-2.5">
+                    Add Files
+                  </button>
+                  <button onClick={onBrowseFolder} className="btn-secondary text-sm px-5 py-2.5">
+                    Add Folder
+                  </button>
+                </div>
+
+                <button
+                  onClick={onBrowseArchive}
+                  className="text-[12px] text-text-muted hover:text-text-secondary underline underline-offset-2 transition-colors"
+                >
+                  or open an existing .andrii archive
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Open idle canvas ───────────────────────────────────────────────────── */
+function OpenIdleCanvas({
+  isDragging, onBrowseArchive,
+}: {
+  isDragging: boolean;
+  onBrowseArchive: () => void;
+}) {
+  return (
+    <div className="canvas">
+      <div className="flex-1 p-6">
+        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
+          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
+              ${isDragging ? "bg-accent text-white" : "bg-elevated text-text-secondary"}`}>
+              <FolderOpen size={32} strokeWidth={1.5} />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
+                {isDragging ? "Drop to open" : "Open an archive"}
+              </h2>
+              {!isDragging && (
+                <p className="text-sm text-text-muted">
+                  Drop a <span className="font-mono">.andrii</span> archive or browse.
+                </p>
+              )}
+            </div>
+
+            {!isDragging && (
+              <button onClick={onBrowseArchive} className="btn-secondary text-sm px-5 py-2.5">
+                Browse archive
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Verify idle canvas ─────────────────────────────────────────────────── */
+function VerifyIdleCanvas({
+  isDragging, onBrowseArchive,
+}: {
+  isDragging: boolean;
+  onBrowseArchive: () => void;
+}) {
+  return (
+    <div className="canvas">
+      <div className="flex-1 p-6">
+        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
+          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
+              ${isDragging ? "bg-accent text-white" : "bg-elevated text-text-secondary"}`}>
+              <ShieldCheck size={32} strokeWidth={1.5} />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
+                {isDragging ? "Drop to verify" : "Verify an archive"}
+              </h2>
+              {!isDragging && (
+                <p className="text-sm text-text-muted leading-relaxed">
+                  No password needed.<br />
+                  Checks that the archive has not been tampered with.
+                </p>
+              )}
+            </div>
+
+            {!isDragging && (
+              <button onClick={onBrowseArchive} className="btn-secondary text-sm px-5 py-2.5">
+                Browse archive
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -61,10 +158,13 @@ function IdleCanvas({ onBrowseFiles, onBrowseArchive }: {
 /* ── Drop overlay ───────────────────────────────────────────────────────── */
 function DropOverlay() {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-none animate-fade-in">
-      <div className="border-2 border-dashed border-accent/40 absolute inset-4 rounded-lg" />
-      <Archive size={24} className="text-accent/60 mb-3" />
-      <p className="text-sm text-text-secondary">Drop to add</p>
+    <div className="fixed inset-0 z-50 bg-accent/8 pointer-events-none animate-fade-in">
+      <div className="absolute inset-4 border-2 border-dashed border-accent/50 rounded-2xl flex items-center justify-center">
+        <div className="text-center">
+          <Lock size={36} className="text-accent/70 mx-auto mb-3" />
+          <p className="text-base font-semibold text-accent">Drop to protect</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -73,10 +173,8 @@ function DropOverlay() {
 export default function App() {
   const [canvas, setCanvas]         = useState<CanvasState>({ mode: "idle" });
   const [isDragging, setIsDragging] = useState(false);
-  const dragCounter                 = useRef(0);
   const canvasRef                   = useRef<CanvasState>({ mode: "idle" });
 
-  // Keep ref in sync
   const setState = useCallback((next: CanvasState | ((prev: CanvasState) => CanvasState)) => {
     setCanvas(prev => {
       const resolved = typeof next === "function" ? next(prev) : next;
@@ -92,35 +190,16 @@ export default function App() {
     }).catch(() => {});
   }, [setState]);
 
-  // Global drag-and-drop
+  // Native Tauri file drag-and-drop (replaces DOM events — paths work correctly)
   useEffect(() => {
-    const onEnter = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current++;
-      if (dragCounter.current === 1) setIsDragging(true);
-    };
-    const onLeave = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current--;
-      if (dragCounter.current === 0) setIsDragging(false);
-    };
-    const onOver = (e: DragEvent) => { e.preventDefault(); };
-    const onDrop = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter.current = 0;
-      setIsDragging(false);
-      const paths: string[] = [];
-      for (const file of Array.from(e.dataTransfer?.files ?? [])) {
-        const p = (file as unknown as { path?: string }).path;
-        if (p) paths.push(p);
-      }
-      if (!paths.length) return;
+    const unlistens: Array<() => void> = [];
 
+    const handlePaths = (paths: string[]) => {
+      if (!paths.length) return;
       const cur = canvasRef.current;
 
-      // Single .andrii → open flow
+      // Single .andrii file → route based on current mode
       if (paths.length === 1 && isAndrii(paths[0])) {
-        // If in verify mode, run verify instead
         if (cur.mode === "verify" || cur.mode === "verified") {
           setState({ mode: "verify", archivePath: paths[0] });
         } else {
@@ -129,7 +208,7 @@ export default function App() {
         return;
       }
 
-      // Non-archive files → create flow
+      // Non-archive files
       if (cur.mode === "create") {
         const existing = new Set(cur.files);
         const fresh    = paths.filter(p => !existing.has(p));
@@ -139,16 +218,20 @@ export default function App() {
       }
     };
 
-    document.addEventListener("dragenter", onEnter);
-    document.addEventListener("dragleave", onLeave);
-    document.addEventListener("dragover",  onOver);
-    document.addEventListener("drop",      onDrop);
-    return () => {
-      document.removeEventListener("dragenter", onEnter);
-      document.removeEventListener("dragleave", onLeave);
-      document.removeEventListener("dragover",  onOver);
-      document.removeEventListener("drop",      onDrop);
-    };
+    listen<string[]>("tauri://file-drop", e => {
+      setIsDragging(false);
+      handlePaths(e.payload);
+    }).then(fn => unlistens.push(fn));
+
+    listen<null>("tauri://file-drop-hover", () => {
+      setIsDragging(true);
+    }).then(fn => unlistens.push(fn));
+
+    listen<null>("tauri://file-drop-cancelled", () => {
+      setIsDragging(false);
+    }).then(fn => unlistens.push(fn));
+
+    return () => unlistens.forEach(f => f());
   }, [setState]);
 
   /* ── nav handler ── */
@@ -166,6 +249,13 @@ export default function App() {
     if (paths.length) setState({ mode: "create", files: paths });
   };
 
+  const browseFolder = async () => {
+    const picked = await open({ multiple: false, directory: true });
+    if (!picked) return;
+    const p = Array.isArray(picked) ? picked[0] : picked;
+    if (p) setState({ mode: "create", files: [p] });
+  };
+
   const browseArchive = async () => {
     const picked = await open({
       multiple: false,
@@ -176,25 +266,40 @@ export default function App() {
     if (p) setState({ mode: "open", archivePath: p });
   };
 
-  /* ── canvas key for fade transitions ── */
-  const canvasKey = canvas.mode;
+  const browseVerifyArchive = async () => {
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: "ANDRII Archive", extensions: ["andrii"] }],
+    });
+    if (!picked) return;
+    const p = Array.isArray(picked) ? picked[0] : picked;
+    if (p) setState({ mode: "verify", archivePath: p });
+  };
+
+  const canvasKey = canvas.mode === "open" && !canvas.archivePath ? "open-idle"
+    : canvas.mode === "verify" && !canvas.archivePath ? "verify-idle"
+    : canvas.mode;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-bg">
       <TitleBar canvasState={canvas} onNavigate={handleNavigate} />
 
-      {/* drag overlay */}
       {isDragging && <DropOverlay />}
 
-      {/* canvas — keyed so each mode transition fades in */}
       <div key={canvasKey} className="flex-1 overflow-hidden animate-fade-in">
         {canvas.mode === "idle" && (
-          <IdleCanvas onBrowseFiles={browseFiles} onBrowseArchive={browseArchive} />
+          <IdleCanvas
+            isDragging={isDragging}
+            onBrowseFiles={browseFiles}
+            onBrowseFolder={browseFolder}
+            onBrowseArchive={browseArchive}
+          />
         )}
 
         {canvas.mode === "create" && (
           <CreateArchive
             files={canvas.files}
+            isDragging={isDragging}
             onFilesChange={files => setState({ mode: "create", files })}
             onCreated={(result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel) =>
               setState({ mode: "created", result, passwordAnalysis: analysis, compressionLabel: compression })
@@ -224,7 +329,7 @@ export default function App() {
         )}
 
         {canvas.mode === "open" && !canvas.archivePath && (
-          <IdleCanvas onBrowseFiles={browseFiles} onBrowseArchive={browseArchive} />
+          <OpenIdleCanvas isDragging={isDragging} onBrowseArchive={browseArchive} />
         )}
 
         {canvas.mode === "unlocked" && (
@@ -236,18 +341,15 @@ export default function App() {
           />
         )}
 
-        {canvas.mode === "verify" && (
+        {(canvas.mode === "verify" || canvas.mode === "verified") && canvas.archivePath && (
           <VerifyArchive
             archivePath={canvas.archivePath}
             onBack={() => setState({ mode: "idle" })}
           />
         )}
 
-        {canvas.mode === "verified" && (
-          <VerifyArchive
-            archivePath={canvas.archivePath}
-            onBack={() => setState({ mode: "idle" })}
-          />
+        {canvas.mode === "verify" && !canvas.archivePath && (
+          <VerifyIdleCanvas isDragging={isDragging} onBrowseArchive={browseVerifyArchive} />
         )}
       </div>
     </div>

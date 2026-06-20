@@ -4,33 +4,34 @@
 
 /* ── Design tokens ────────────────────────────────────────────────────────── */
 :root {
-  --c-bg:            15  15  15;   /* #0F0F0F */
-  --c-surface:       23  23  23;   /* #171717 */
-  --c-elevated:      31  31  31;   /* #1F1F1F */
-  --c-hover:         38  38  38;   /* #262626 */
-  --c-border:        42  42  42;   /* #2A2A2A */
-  --c-border-strong: 51  51  51;   /* #333333 */
+  --c-bg:            249 250 251;   /* gray-50  */
+  --c-surface:       255 255 255;   /* white    */
+  --c-elevated:      243 244 246;   /* gray-100 */
+  --c-hover:         229 231 235;   /* gray-200 */
+  --c-border:        229 231 235;   /* gray-200 */
+  --c-border-strong: 209 213 219;   /* gray-300 */
 
-  --c-accent:        16 185 129;   /* emerald-500 */
-  --c-accent-hover:   5 150 105;   /* emerald-600 */
+  --c-accent:         79  70 229;   /* indigo-600 */
+  --c-accent-hover:   67  56 202;   /* indigo-700 */
 
-  --c-text-primary:  245 245 245;  /* #F5F5F5 */
-  --c-text-secondary:156 163 175;  /* gray-400  */
-  --c-text-muted:     82  82  82;  /* neutral-600*/
-  --c-text-inverse:   15  15  15;  /* #0F0F0F   */
+  --c-text-primary:   17  24  39;   /* gray-900 */
+  --c-text-secondary:107 114 128;   /* gray-500 */
+  --c-text-muted:    156 163 175;   /* gray-400 */
+  --c-text-inverse:  255 255 255;   /* white    */
 
-  --c-success:       16 185 129;
-  --c-success-text: 110 231 183;   /* emerald-300 */
+  --c-success:         5 150 105;   /* emerald-600 */
+  --c-success-text:    4 108  78;   /* emerald-700 */
 
-  --c-warning:      245 158  11;
-  --c-warning-text: 252 211  77;   /* amber-300  */
+  --c-warning:       217 119   6;   /* amber-600 */
+  --c-warning-text:  180  83   9;   /* amber-700 */
 
-  --c-danger:       239  68  68;
-  --c-danger-text:  252 165 165;   /* red-300    */
+  --c-danger:        220  38  38;   /* red-600 */
+  --c-danger-text:   185  28  28;   /* red-700 */
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.6);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.7);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:   0 1px 3px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg:   0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -62,9 +63,9 @@
   }
 
   *:focus-visible {
-    outline: 1.5px solid rgb(var(--c-accent) / 0.7);
+    outline: 2px solid rgb(var(--c-accent) / 0.5);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: 4px;
   }
 }
 
@@ -74,58 +75,58 @@
   /* ── Buttons ──────────────────────────────────────────────────────────── */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5
-           text-sm font-medium rounded
+           text-sm font-medium rounded-lg
            transition-colors duration-100
-           disabled:opacity-35 disabled:cursor-not-allowed
+           disabled:opacity-40 disabled:cursor-not-allowed
            cursor-pointer select-none;
   }
 
   .btn-primary {
-    @apply btn px-4 py-2
+    @apply btn px-5 py-2.5
            bg-accent hover:bg-accent-hover
-           text-text-inverse;
+           text-text-inverse shadow-sm;
   }
 
   .btn-secondary {
-    @apply btn px-3 py-1.5
-           bg-elevated hover:bg-hover
-           border border-border
-           text-text-secondary hover:text-text-primary;
+    @apply btn px-4 py-2
+           bg-surface hover:bg-elevated
+           border border-border hover:border-border-strong
+           text-text-secondary hover:text-text-primary
+           shadow-sm;
   }
 
   .btn-ghost {
-    @apply btn px-3 py-1.5
+    @apply btn px-3 py-2
            hover:bg-elevated
            text-text-muted hover:text-text-secondary;
   }
 
   .btn-danger {
-    @apply btn px-3 py-1.5
-           bg-danger/10 hover:bg-danger/20
+    @apply btn px-4 py-2
+           bg-danger/8 hover:bg-danger/15
            text-danger-text;
   }
 
   /* ── Inputs ───────────────────────────────────────────────────────────── */
   .input {
-    @apply w-full bg-transparent border-b border-border
-           px-0 py-2 text-sm text-text-primary
+    @apply w-full bg-transparent border-b-2 border-border
+           px-0 py-2.5 text-base text-text-primary
            placeholder:text-text-muted
            focus:outline-none focus:border-accent
-           transition-colors duration-100;
+           transition-colors duration-150;
   }
 
-  /* Boxed variant for tight UI spots */
   .input-box {
-    @apply w-full bg-surface border border-border rounded
+    @apply w-full bg-surface border border-border rounded-lg
            px-3 py-2 text-sm text-text-primary
            placeholder:text-text-muted
-           focus:outline-none focus:border-accent/60
-           transition-colors duration-100;
+           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/10
+           transition-all duration-150;
   }
 
   /* ── Canvas layouts ───────────────────────────────────────────────────── */
   .canvas {
-    @apply flex flex-col h-full overflow-hidden;
+    @apply flex flex-col h-full overflow-hidden bg-bg;
   }
 
   .canvas-body {
@@ -138,38 +139,99 @@
 
   .bottom-bar {
     @apply flex items-center justify-between
-           px-10 py-4 border-t border-border/60
-           shrink-0;
+           px-8 py-4 border-t border-border
+           bg-surface shrink-0;
   }
 
   /* ── Title bar ────────────────────────────────────────────────────────── */
   .title-bar {
-    @apply flex items-center h-11
-           border-b border-border/60
+    @apply flex items-center h-10
+           bg-surface border-b border-border
            shrink-0 select-none;
   }
 
-  /* ── File row (create / open) ─────────────────────────────────────────── */
+  /* ── Drop zone ────────────────────────────────────────────────────────── */
+  .drop-zone {
+    @apply flex flex-col items-center justify-center
+           border-2 border-dashed border-border rounded-2xl
+           transition-all duration-200 ease-out;
+  }
+
+  .drop-zone-active {
+    @apply border-accent bg-accent/5;
+  }
+
+  /* ── File cards ───────────────────────────────────────────────────────── */
+  .file-card {
+    @apply relative flex flex-col items-center gap-2 p-5
+           bg-surface border border-border rounded-2xl
+           hover:border-border-strong
+           transition-all duration-150
+           cursor-default;
+    box-shadow: var(--shadow-card);
+  }
+
+  .file-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.06);
+  }
+
+  .file-card-remove {
+    @apply absolute top-2.5 right-2.5
+           w-5 h-5 flex items-center justify-center
+           rounded-md opacity-0 group-hover:opacity-100
+           text-text-muted hover:text-danger hover:bg-danger/10
+           transition-all duration-100;
+  }
+
+  .file-card-icon {
+    @apply w-12 h-12 rounded-xl flex items-center justify-center shrink-0;
+  }
+
+  .file-card-name {
+    @apply text-[13px] font-medium text-text-primary text-center
+           line-clamp-2 break-all w-full leading-snug;
+  }
+
+  .file-card-size {
+    @apply text-[11px] text-text-muted;
+  }
+
+  /* ── Value strip ──────────────────────────────────────────────────────── */
+  .value-strip {
+    @apply grid grid-cols-4 divide-x divide-border
+           border border-border rounded-xl bg-elevated/40;
+  }
+
+  .value-item {
+    @apply flex flex-col items-center text-center gap-2 py-4 px-3;
+  }
+
+  .value-icon-wrap {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center
+           bg-accent/10;
+  }
+
+  /* ── File row (open archive) ──────────────────────────────────────────── */
   .file-row {
     @apply flex items-center gap-3 py-2.5
-           border-b border-border/40 last:border-0;
+           border-b border-border last:border-0;
   }
 
   /* ── Separator ────────────────────────────────────────────────────────── */
   .divider {
-    @apply border-t border-border/60 my-5;
+    @apply border-t border-border my-5;
   }
 
   /* ── Check row (verify, report) ───────────────────────────────────────── */
   .check-row {
-    @apply flex items-start gap-3 py-1.5;
+    @apply flex items-start gap-3 py-2;
   }
 
-  /* ── Result panel (security report) ──────────────────────────────────── */
+  /* ── Report stat row ──────────────────────────────────────────────────── */
   .report-stat {
-    @apply flex items-baseline justify-between py-1
-           border-b border-border/40 last:border-0
-           text-2xs;
+    @apply flex items-baseline justify-between py-1.5
+           border-b border-border last:border-0
+           text-[12px];
   }
 }
 

@@ -48,27 +48,23 @@ export default {
         "2xs": ["0.68rem", "1rem"],
       },
       boxShadow: {
-        sm: "var(--shadow-sm)",
+        sm:   "var(--shadow-sm)",
         DEFAULT: "var(--shadow-md)",
-        lg: "var(--shadow-lg)",
+        lg:   "var(--shadow-lg)",
+        card: "var(--shadow-card)",
       },
       animation: {
-        "fade-in": "fadeIn 0.12s ease-out",
+        "fade-in":  "fadeIn 0.12s ease-out",
         "slide-up": "slideUp 0.18s ease-out",
-        "drop-pulse": "dropPulse 2.4s ease-in-out infinite",
       },
       keyframes: {
         fadeIn: {
-          "0%": { opacity: "0" },
+          "0%":   { opacity: "0" },
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%":   { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        dropPulse: {
-          "0%, 100%": { borderColor: "rgb(var(--c-border) / 0.6)" },
-          "50%": { borderColor: "rgb(var(--c-accent) / 0.3)" },
         },
       },
     },
