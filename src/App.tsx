@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Shield, FolderOpen, ShieldCheck, Lock } from "lucide-react";
 
@@ -190,9 +190,9 @@ export default function App() {
     }).catch(() => {});
   }, [setState]);
 
-  // Native Tauri file drag-and-drop (replaces DOM events — paths work correctly)
+  // Native Tauri v2 drag-and-drop via getCurrentWebview().onDragDropEvent()
   useEffect(() => {
-    const unlistens: Array<() => void> = [];
+    let unlisten: (() => void) | undefined;
 
     const handlePaths = (paths: string[]) => {
       if (!paths.length) return;
@@ -218,20 +218,19 @@ export default function App() {
       }
     };
 
-    listen<string[]>("tauri://file-drop", e => {
-      setIsDragging(false);
-      handlePaths(e.payload);
-    }).then(fn => unlistens.push(fn));
+    getCurrentWebview().onDragDropEvent(event => {
+      const p = event.payload;
+      if (p.type === "enter") {
+        setIsDragging(true);
+      } else if (p.type === "drop") {
+        setIsDragging(false);
+        handlePaths(p.paths);
+      } else if (p.type === "leave") {
+        setIsDragging(false);
+      }
+    }).then(fn => { unlisten = fn; });
 
-    listen<null>("tauri://file-drop-hover", () => {
-      setIsDragging(true);
-    }).then(fn => unlistens.push(fn));
-
-    listen<null>("tauri://file-drop-cancelled", () => {
-      setIsDragging(false);
-    }).then(fn => unlistens.push(fn));
-
-    return () => unlistens.forEach(f => f());
+    return () => unlisten?.();
   }, [setState]);
 
   /* ── nav handler ── */
