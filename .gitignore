@@ -1,0 +1,31 @@
+# Rust
+target/
+Cargo.lock
+
+# Node / Frontend
+node_modules/
+dist/
+.cache/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+*.iml
+
+# Env
+.env
+.env.local
+
+# Test archives
+*.andrii
+!tests/fixtures/*.andrii

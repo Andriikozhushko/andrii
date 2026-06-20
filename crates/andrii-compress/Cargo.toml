@@ -1,0 +1,10 @@
+[package]
+name = "andrii-compress"
+version.workspace = true
+edition.workspace = true
+description = "Compression layer for the ANDRII archive format"
+
+[dependencies]
+zstd = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

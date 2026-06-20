@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Allow text selection in inputs and output areas */
+  input, textarea, [data-selectable] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #252b3b;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2e3650;
+  }
+
+  /* Focus ring */
+  *:focus-visible {
+    outline: 2px solid #4a90d9;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-surface border border-border rounded-xl shadow-card;
+  }
+
+  .card-elevated {
+    @apply bg-bg-elevated border border-border rounded-xl shadow-elevated;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-accent-hover
+           text-white text-sm font-medium rounded-lg transition-colors duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-bg-elevated hover:bg-bg-hover
+           border border-border text-text-primary text-sm font-medium rounded-lg
+           transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-danger hover:bg-danger-light
+           text-white text-sm font-medium rounded-lg transition-colors duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .input-field {
+    @apply w-full bg-bg-base border border-border rounded-lg px-4 py-2.5
+           text-text-primary text-sm placeholder-text-muted
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30
+           transition-colors duration-150;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-text-primary;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-success-muted text-success-text;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning-muted text-warning-text;
+  }
+
+  .badge-danger {
+    @apply badge bg-danger-muted text-danger-text;
+  }
+
+  .badge-accent {
+    @apply badge bg-accent-subtle text-accent;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent to-blue-300 bg-clip-text text-transparent;
+  }
+}

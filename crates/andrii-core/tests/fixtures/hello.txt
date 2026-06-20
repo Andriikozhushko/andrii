@@ -1,0 +1,4 @@
+Hello, ANDRII!
+This is a plain text fixture file.
+It contains multiple lines.
+Unicode: café, résumé, naïve, 日本語, Ñoño

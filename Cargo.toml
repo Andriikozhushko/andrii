@@ -1,0 +1,47 @@
+[workspace]
+members = [
+    "crates/andrii-crypto",
+    "crates/andrii-compress",
+    "crates/andrii-core",
+    "src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["ANDRII"]
+license = "MIT"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Crypto
+chacha20poly1305 = "0.10"
+argon2 = "0.5"
+blake3 = "1"
+rand = "0.8"
+zeroize = { version = "1", features = ["derive"] }
+base64 = "0.22"
+hex = "0.4"
+
+# Compression
+zstd = "0.13"
+
+# Internal crates
+andrii-crypto = { path = "crates/andrii-crypto" }
+andrii-compress = { path = "crates/andrii-compress" }
+andrii-core = { path = "crates/andrii-core" }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

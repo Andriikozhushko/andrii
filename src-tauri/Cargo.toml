@@ -1,0 +1,29 @@
+[package]
+name = "andrii-app"
+version.workspace = true
+edition.workspace = true
+description = "ANDRII secure archive — Tauri application"
+
+[lib]
+name = "andrii_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "andrii-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+andrii-core = { workspace = true }
+andrii-crypto = { workspace = true }
+andrii-compress = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tokio = { version = "1", features = ["full"] }
+thiserror = { workspace = true }
