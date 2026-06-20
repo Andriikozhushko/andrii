@@ -1,23 +1,18 @@
 import type { Config } from "tailwindcss";
 
-// Colors use CSS variables with space-separated RGB for Tailwind opacity support.
-// Example: bg-accent/10 → rgb(var(--c-accent) / 0.1)
 function v(name: string) {
   return `rgb(var(${name}) / <alpha-value>)`;
 }
 
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
-  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        bg: {
-          base: v("--c-bg-base"),
-          surface: v("--c-bg-surface"),
-          elevated: v("--c-bg-elevated"),
-          hover: v("--c-bg-hover"),
-        },
+        bg: v("--c-bg"),
+        surface: v("--c-surface"),
+        elevated: v("--c-elevated"),
+        hover: v("--c-hover"),
         border: {
           DEFAULT: v("--c-border"),
           strong: v("--c-border-strong"),
@@ -31,45 +26,36 @@ export default {
         accent: {
           DEFAULT: v("--c-accent"),
           hover: v("--c-accent-hover"),
-          muted: v("--c-accent-muted"),
-          subtle: v("--c-accent-subtle"),
         },
         success: {
           DEFAULT: v("--c-success"),
-          light: v("--c-success-light"),
-          muted: v("--c-success-muted"),
           text: v("--c-success-text"),
         },
         warning: {
           DEFAULT: v("--c-warning"),
-          light: v("--c-warning-light"),
-          muted: v("--c-warning-muted"),
           text: v("--c-warning-text"),
         },
         danger: {
           DEFAULT: v("--c-danger"),
-          light: v("--c-danger-light"),
-          muted: v("--c-danger-muted"),
           text: v("--c-danger-text"),
         },
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        mono: ["JetBrains Mono", "Fira Code", "Consolas", "monospace"],
       },
       fontSize: {
         "2xs": ["0.68rem", "1rem"],
       },
       boxShadow: {
-        card: "var(--shadow-card)",
-        elevated: "var(--shadow-elevated)",
-        dialog: "var(--shadow-dialog)",
-        glow: "var(--shadow-glow)",
+        sm: "var(--shadow-sm)",
+        DEFAULT: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
       },
       animation: {
-        "fade-in": "fadeIn 0.15s ease-out",
-        "slide-up": "slideUp 0.2s ease-out",
-        "pulse-subtle": "pulseSubtle 2s ease-in-out infinite",
+        "fade-in": "fadeIn 0.12s ease-out",
+        "slide-up": "slideUp 0.18s ease-out",
+        "drop-pulse": "dropPulse 2.4s ease-in-out infinite",
       },
       keyframes: {
         fadeIn: {
@@ -77,12 +63,12 @@ export default {
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { opacity: "0", transform: "translateY(6px)" },
+          "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        pulseSubtle: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.6" },
+        dropPulse: {
+          "0%, 100%": { borderColor: "rgb(var(--c-border) / 0.6)" },
+          "50%": { borderColor: "rgb(var(--c-accent) / 0.3)" },
         },
       },
     },

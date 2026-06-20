@@ -1,113 +1,81 @@
 import { useEffect, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PasswordStrengthResult } from "../types";
-import { CheckCircle2, Circle, Zap, Shield } from "lucide-react";
 
 interface PasswordStrengthProps {
   password: string;
-  onResult?: (result: PasswordStrengthResult | null) => void;
+  onResult?: (r: PasswordStrengthResult | null) => void;
 }
 
-const SCORE_CONFIG = [
-  { label: "Very Weak", barColor: "bg-danger",    textColor: "text-danger-text"  },
-  { label: "Weak",      barColor: "bg-warning",   textColor: "text-warning-text" },
-  { label: "Fair",      barColor: "bg-yellow-500", textColor: "text-yellow-600"   },
-  { label: "Strong",    barColor: "bg-success",    textColor: "text-success-text" },
-  { label: "Very Strong", barColor: "bg-teal-500", textColor: "text-teal-600"     },
+const BARS = [
+  { color: "bg-danger"  },
+  { color: "bg-warning" },
+  { color: "bg-yellow-500" },
+  { color: "bg-accent"  },
+  { color: "bg-teal-400" },
 ];
 
-function withKdfLabel(result: PasswordStrengthResult): { text: string; isWeak: boolean } {
-  const isWeak = result.score <= 1;
-  if (isWeak) return { text: "Still not recommended", isWeak: true };
-  return { text: result.estimated_crack_time, isWeak: false };
-}
+const LABELS = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"];
+const LABEL_COLORS = [
+  "text-danger-text", "text-warning-text", "text-yellow-500",
+  "text-accent",      "text-teal-400",
+];
 
 export default function PasswordStrength({ password, onResult }: PasswordStrengthProps) {
   const [result, setResult] = useState<PasswordStrengthResult | null>(null);
 
   const analyze = useCallback(async (pwd: string) => {
-    if (!pwd) {
-      setResult(null);
-      onResult?.(null);
-      return;
-    }
+    if (!pwd) { setResult(null); onResult?.(null); return; }
     try {
-      const res = await invoke<PasswordStrengthResult>("analyze_password_strength", { password: pwd });
-      setResult(res);
-      onResult?.(res);
-    } catch {
-      // silently fail
-    }
+      const r = await invoke<PasswordStrengthResult>("analyze_password_strength", { password: pwd });
+      setResult(r);
+      onResult?.(r);
+    } catch { /* ignore */ }
   }, [onResult]);
 
   useEffect(() => {
-    const timer = setTimeout(() => analyze(password), 80);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => analyze(password), 80);
+    return () => clearTimeout(t);
   }, [password, analyze]);
 
   if (!password || !result) return null;
 
-  const cfg = SCORE_CONFIG[result.score] ?? SCORE_CONFIG[0];
-  const kdf = withKdfLabel(result);
   const isWeak = result.score <= 1;
-
-  const requirements = [
-    { ok: result.has_lowercase,  label: "Lowercase" },
-    { ok: result.has_uppercase,  label: "Uppercase" },
-    { ok: result.has_digits,     label: "Numbers"   },
-    { ok: result.has_symbols,    label: "Symbols"   },
-    { ok: result.length >= 12,   label: "12+ chars" },
-  ];
+  const labelColor = LABEL_COLORS[result.score] ?? LABEL_COLORS[0];
 
   return (
-    <div className="mt-2.5 space-y-2.5 animate-fade-in">
-      {/* Strength bar */}
-      <div className="flex items-center gap-2">
-        <span className={`text-xs font-medium ${cfg.textColor} w-20 shrink-0`}>{cfg.label}</span>
+    <div className="mt-3 space-y-2.5 animate-fade-in">
+      {/* strength bar */}
+      <div className="flex items-center gap-2.5">
         <div className="flex gap-0.5 flex-1">
-          {Array.from({ length: 5 }).map((_, i) => (
+          {BARS.map((b, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded-full transition-all duration-300 ${i <= result.score ? cfg.barColor : "bg-border"}`}
+              className={`h-0.5 flex-1 rounded-full transition-all duration-300 ${i <= result.score ? b.color : "bg-border"}`}
             />
           ))}
         </div>
+        <span className={`text-2xs font-medium tabular-nums ${labelColor}`}>{LABELS[result.score]}</span>
       </div>
 
-      {/* Crack time estimates */}
-      <div className="rounded-md border border-border overflow-hidden text-2xs">
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-border">
-          <Zap size={11} className="text-danger shrink-0" />
-          <span className="text-text-muted flex-1">Without ANDRII protection</span>
-          <span className="font-mono font-medium text-danger-text">{result.gpu_crack_time}</span>
+      {/* time estimates */}
+      <div className="space-y-0.5 text-2xs">
+        <div className="flex justify-between">
+          <span className="text-text-muted">Without protection</span>
+          <span className="font-mono text-danger-text">{result.gpu_crack_time}</span>
         </div>
-        <div className="flex items-center gap-2 px-2.5 py-1.5">
-          <Shield size={11} className="text-success shrink-0" />
-          <span className="text-text-muted flex-1">With ANDRII KDF</span>
-          <span className={`font-mono font-medium ${kdf.isWeak ? "text-warning-text" : "text-success-text"}`}>
-            {kdf.text}
+        <div className="flex justify-between">
+          <span className="text-text-muted">With ANDRII KDF</span>
+          <span className={`font-mono ${isWeak ? "text-warning-text" : "text-accent"}`}>
+            {isWeak ? "Still not recommended" : result.estimated_crack_time}
           </span>
         </div>
       </div>
 
-      {/* Recommendation for weak passwords */}
-      {isWeak && result.suggestions.length > 0 && (
-        <p className="text-2xs text-warning-text leading-relaxed">
-          {result.suggestions[0]}
-        </p>
+      {/* suggestion */}
+      {isWeak && result.suggestions[0] && (
+        <p className="text-2xs text-warning-text leading-relaxed">{result.suggestions[0]}</p>
       )}
-
-      {/* Requirements */}
-      <div className="flex gap-x-4 gap-y-0.5 flex-wrap">
-        {requirements.map(({ ok, label }) => (
-          <div key={label} className="flex items-center gap-1">
-            {ok
-              ? <CheckCircle2 size={10} className="text-success shrink-0" />
-              : <Circle size={10} className="text-text-muted shrink-0" />}
-            <span className={`text-2xs ${ok ? "text-text-secondary" : "text-text-muted"}`}>{label}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

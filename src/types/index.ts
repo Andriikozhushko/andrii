@@ -1,6 +1,3 @@
-export type Screen = "create" | "open" | "verify" | "settings";
-export type Theme = "system" | "light" | "dark";
-
 export interface PasswordStrengthResult {
   score: number;
   label: string;
@@ -13,14 +10,6 @@ export interface PasswordStrengthResult {
   has_symbols: boolean;
   length: number;
   suggestions: string[];
-}
-
-export interface CreateArchiveRequest {
-  file_paths: string[];
-  output_path: string;
-  archive_name: string;
-  password: string;
-  compression: "Fast" | "Balanced" | "Maximum";
 }
 
 export interface CreateArchiveResponse {
@@ -67,3 +56,17 @@ export interface ProgressEvent {
 }
 
 export type CompressionLevel = "Fast" | "Balanced" | "Maximum";
+
+/* Legacy aliases (kept so unused pages don't error during tsc) */
+export type Screen = "create" | "open" | "verify" | "settings";
+export type Theme  = "system" | "light" | "dark";
+
+/* Canvas state machine ─────────────────────────────────────────────────── */
+export type CanvasState =
+  | { mode: "idle" }
+  | { mode: "create"; files: string[] }
+  | { mode: "created"; result: CreateArchiveResponse; passwordAnalysis: PasswordStrengthResult | null; compressionLabel: CompressionLevel }
+  | { mode: "open"; archivePath: string }
+  | { mode: "unlocked"; archivePath: string; password: string; info: OpenArchiveResponse }
+  | { mode: "verify"; archivePath?: string }
+  | { mode: "verified"; result: VerifyResult; archivePath: string };
