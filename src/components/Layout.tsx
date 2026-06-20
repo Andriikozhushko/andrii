@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import type { Screen } from "../types";
-import { ShieldCheck, ChevronLeft } from "lucide-react";
+import { ShieldCheck, ChevronLeft, Lock } from "lucide-react";
+
+const SCREEN_TITLES: Record<Screen, string> = {
+  home: "",
+  create: "Create Archive",
+  open: "Open Archive",
+  verify: "Verify Archive",
+};
 
 interface LayoutProps {
   children: ReactNode;
@@ -31,11 +38,16 @@ export default function Layout({ children, screen, onNavigate }: LayoutProps) {
               ANDRII
             </span>
           </div>
+          {screen !== "home" && SCREEN_TITLES[screen] && (
+            <>
+              <span className="text-border-strong text-xs">›</span>
+              <span className="text-xs text-text-secondary">{SCREEN_TITLES[screen]}</span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
           <span className="badge badge-accent">v0.1.0</span>
-          <span className="text-2xs text-text-muted">Secure Archive</span>
         </div>
       </header>
 
@@ -46,14 +58,9 @@ export default function Layout({ children, screen, onNavigate }: LayoutProps) {
 
       {/* Status bar */}
       <footer className="flex items-center justify-between px-6 py-1.5 border-t border-border/30 bg-bg-surface/50 shrink-0">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 text-2xs text-text-muted">
-            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-subtle" />
-            XChaCha20-Poly1305
-          </span>
-          <span className="text-2xs text-text-muted">Argon2id</span>
-          <span className="text-2xs text-text-muted">BLAKE3</span>
-          <span className="text-2xs text-text-muted">Zstd</span>
+        <div className="flex items-center gap-2">
+          <Lock size={10} className="text-success" />
+          <span className="text-2xs text-text-muted">End-to-end encrypted</span>
         </div>
         <span className="text-2xs text-text-muted">Format v1</span>
       </footer>

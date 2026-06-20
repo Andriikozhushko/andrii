@@ -2,20 +2,14 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  ShieldCheck, ShieldX, ShieldAlert, FolderOpen, Loader2,
-  CheckCircle2, XCircle, AlertCircle, Hash, FileText,
+  ShieldCheck, ShieldX, FolderOpen, Loader2,
+  CheckCircle2, XCircle, AlertCircle,
 } from "lucide-react";
 
 import type { VerifyResult } from "../types";
 
 interface VerifyArchiveProps {
   onBack: () => void;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 export default function VerifyArchive({ onBack }: VerifyArchiveProps) {
@@ -55,39 +49,12 @@ export default function VerifyArchive({ onBack }: VerifyArchiveProps) {
     }
   };
 
-  const StatusIcon = result
-    ? result.is_valid
-      ? ShieldCheck
-      : result.has_valid_magic
-      ? ShieldAlert
-      : ShieldX
-    : ShieldCheck;
-
-  const statusColor = result
-    ? result.is_valid
-      ? "text-success"
-      : result.has_valid_magic
-      ? "text-warning"
-      : "text-danger"
-    : "text-text-muted";
-
-  const statusBg = result
-    ? result.is_valid
-      ? "bg-success/10 border-success/20"
-      : result.has_valid_magic
-      ? "bg-warning/10 border-warning/20"
-      : "bg-danger/10 border-danger/20"
-    : "bg-bg-elevated border-border";
-
-  const statusMessage = result
-    ? result.is_valid
-      ? "Archive integrity verified"
-      : result.error ?? "Verification failed"
-    : null;
+  const isTampered = result && !result.is_valid && result.has_valid_magic && result.version_supported && !result.integrity_hash_valid;
+  const isUnknownFormat = result && !result.has_valid_magic;
 
   return (
     <div className="flex flex-col items-center justify-start px-8 py-8 h-full overflow-y-auto">
-      <div className="w-full max-w-xl animate-slide-up">
+      <div className="w-full max-w-lg animate-slide-up">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <div className="w-9 h-9 rounded-xl bg-bg-elevated border border-border flex items-center justify-center">
@@ -143,29 +110,54 @@ export default function VerifyArchive({ onBack }: VerifyArchiveProps) {
 
         {/* Result */}
         {result && (
-          <div className={`card p-5 border ${statusBg} animate-slide-up`}>
-            {/* Status header */}
-            <div className="flex items-center gap-4 mb-5 pb-5 border-b border-border/40">
-              <div className={`w-14 h-14 rounded-2xl ${statusBg} border flex items-center justify-center`}>
-                <StatusIcon size={28} className={statusColor} />
+          <div className="animate-slide-up space-y-4">
+            {/* Primary verdict */}
+            {result.is_valid ? (
+              <div className="flex items-center gap-4 px-5 py-4 rounded-xl bg-success/8 border border-success/20">
+                <div className="w-12 h-12 rounded-xl bg-success/15 border border-success/20 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={24} className="text-success" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-success-text">Archive is authentic</p>
+                  <p className="text-2xs text-text-secondary mt-0.5 leading-relaxed">
+                    Integrity verified. Content has not been modified since creation.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className={`text-base font-semibold ${statusColor}`}>
-                  {result.is_valid ? "Valid Archive" : result.has_valid_magic ? "Warning" : "Invalid Archive"}
-                </p>
-                <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
-                  {statusMessage}
-                </p>
+            ) : isTampered ? (
+              <div className="flex items-center gap-4 px-5 py-4 rounded-xl bg-danger/8 border border-danger/30">
+                <div className="w-12 h-12 rounded-xl bg-danger/15 border border-danger/25 flex items-center justify-center shrink-0">
+                  <ShieldX size={24} className="text-danger" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-danger-text">Archive has been modified</p>
+                  <p className="text-2xs text-text-secondary mt-0.5 leading-relaxed">
+                    Do not extract this archive. The content cannot be trusted.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-4 px-5 py-4 rounded-xl bg-danger/8 border border-danger/30">
+                <div className="w-12 h-12 rounded-xl bg-danger/15 border border-danger/25 flex items-center justify-center shrink-0">
+                  <ShieldX size={24} className="text-danger" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-danger-text">
+                    {isUnknownFormat ? "Not a valid ANDRII archive" : "Verification failed"}
+                  </p>
+                  <p className="text-2xs text-text-secondary mt-0.5 leading-relaxed">
+                    {result.error ?? "This file cannot be verified."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Checks */}
-            <div className="space-y-2.5 mb-5">
-              <p className="label">Verification Checks</p>
+            <div className="card p-4 space-y-2">
               <CheckRow
                 ok={result.has_valid_magic}
                 label="Valid ANDRII format"
-                desc="Magic bytes and file structure recognized"
+                desc="File structure and magic bytes recognized"
               />
               <CheckRow
                 ok={result.version_supported}
@@ -175,26 +167,14 @@ export default function VerifyArchive({ onBack }: VerifyArchiveProps) {
               />
               <CheckRow
                 ok={result.integrity_hash_valid}
-                label="Archive integrity"
-                desc="BLAKE3 hash matches archive content"
-                warn={!result.integrity_hash_valid && result.version_supported}
+                label="Content integrity"
+                desc={result.integrity_hash_valid
+                  ? "BLAKE3 hash matches — archive unmodified"
+                  : "BLAKE3 hash mismatch — archive may have been tampered with"}
+                warn={false}
+                critical={!result.integrity_hash_valid && result.version_supported}
               />
             </div>
-
-            {/* Details */}
-            <div className="grid grid-cols-2 gap-2">
-              <DetailStat icon={FileText} label="File Size" value={formatBytes(result.file_size)} />
-              <DetailStat icon={Hash} label="Format Version" value={`v${result.format_version}`} />
-            </div>
-
-            {result.is_valid && (
-              <div className="mt-4 px-3 py-2.5 rounded-lg bg-success/8 border border-success/15">
-                <p className="text-2xs text-success-text leading-relaxed">
-                  Archive passed all integrity checks. Content authenticity can only be verified
-                  by decrypting with the correct password.
-                </p>
-              </div>
-            )}
           </div>
         )}
 
@@ -210,30 +190,16 @@ export default function VerifyArchive({ onBack }: VerifyArchiveProps) {
 }
 
 function CheckRow({
-  ok, label, desc, warn = false,
-}: { ok: boolean; label: string; desc: string; warn?: boolean }) {
-  const Icon = ok ? CheckCircle2 : warn ? AlertCircle : XCircle;
-  const color = ok ? "text-success" : warn ? "text-warning" : "text-danger";
+  ok, label, desc, warn = false, critical = false,
+}: { ok: boolean; label: string; desc: string; warn?: boolean; critical?: boolean }) {
+  const Icon = ok ? CheckCircle2 : (critical || (!warn && !ok)) ? XCircle : AlertCircle;
+  const color = ok ? "text-success" : critical ? "text-danger" : warn ? "text-warning" : "text-danger";
   return (
     <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-bg-base border border-border/50">
       <Icon size={15} className={`${color} shrink-0 mt-0.5`} />
       <div>
         <p className="text-xs font-medium text-text-primary">{label}</p>
         <p className="text-2xs text-text-muted mt-0.5">{desc}</p>
-      </div>
-    </div>
-  );
-}
-
-function DetailStat({
-  icon: Icon, label, value,
-}: { icon: React.ComponentType<{ size?: number | string; className?: string }>; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-bg-base border border-border/50">
-      <Icon size={13} className="text-text-muted" />
-      <div>
-        <p className="text-2xs text-text-muted">{label}</p>
-        <p className="text-xs font-medium font-mono text-text-secondary">{value}</p>
       </div>
     </div>
   );

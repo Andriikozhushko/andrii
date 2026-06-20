@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PasswordStrengthResult } from "../types";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, Zap, Shield } from "lucide-react";
 
 interface PasswordStrengthProps {
   password: string;
@@ -32,7 +32,7 @@ export default function PasswordStrength({ password, onResult }: PasswordStrengt
       setResult(res);
       onResult?.(res);
     } catch {
-      // silently fail on analysis errors
+      // silently fail
     }
   }, [onResult]);
 
@@ -56,29 +56,39 @@ export default function PasswordStrength({ password, onResult }: PasswordStrengt
 
   return (
     <div className="mt-3 space-y-3 animate-fade-in">
-      {/* Strength bars */}
+      {/* Strength label + bars */}
       <div className="flex items-center gap-2">
+        <span className={`text-xs font-semibold ${config.textColor} min-w-[72px]`}>
+          {config.label}
+        </span>
         <div className="flex gap-1 flex-1">
           {Array.from({ length: 5 }).map((_, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+              className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
                 i < filledBars ? config.color : "bg-border"
               }`}
             />
           ))}
         </div>
-        <span className={`text-xs font-medium ${config.textColor} min-w-[70px] text-right`}>
-          {config.label}
-        </span>
       </div>
 
-      {/* Crack time estimate */}
-      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-bg-base border border-border/60">
-        <span className="text-2xs text-text-muted">Estimated crack time</span>
-        <span className={`text-2xs font-medium font-mono ${config.textColor}`}>
-          {result.estimated_crack_time}
-        </span>
+      {/* Dual crack time estimate */}
+      <div className="rounded-lg bg-bg-base border border-border/60 overflow-hidden">
+        <div className="flex items-center gap-2.5 px-3 py-2 border-b border-border/40">
+          <Zap size={12} className="text-danger-text shrink-0" />
+          <span className="text-2xs text-text-muted flex-1">Without protection (GPU)</span>
+          <span className="text-2xs font-medium font-mono text-danger-text">
+            {result.gpu_crack_time}
+          </span>
+        </div>
+        <div className="flex items-center gap-2.5 px-3 py-2">
+          <Shield size={12} className="text-success shrink-0" />
+          <span className="text-2xs text-text-muted flex-1">With ANDRII protection</span>
+          <span className={`text-2xs font-medium font-mono ${config.textColor}`}>
+            {result.estimated_crack_time}
+          </span>
+        </div>
       </div>
 
       {/* Requirements checklist */}
@@ -95,11 +105,6 @@ export default function PasswordStrength({ password, onResult }: PasswordStrengt
             </span>
           </div>
         ))}
-      </div>
-
-      {/* Entropy */}
-      <div className="text-2xs text-text-muted text-right font-mono">
-        {result.entropy_bits.toFixed(1)} bits entropy
       </div>
     </div>
   );

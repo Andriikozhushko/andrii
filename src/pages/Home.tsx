@@ -1,131 +1,152 @@
+import { useCallback, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { Archive, FolderOpen, ShieldCheck, ArrowRight } from "lucide-react";
 import type { Screen } from "../types";
-import { Archive, FolderOpen, ShieldCheck, Lock, Key, Hash } from "lucide-react";
 
 interface HomeProps {
   onNavigate: (s: Screen) => void;
+  onNavigateWithFiles?: (files: string[]) => void;
 }
 
-const features = [
-  { icon: Lock, label: "XChaCha20-Poly1305", desc: "Authenticated encryption" },
-  { icon: Key, label: "Argon2id", desc: "Memory-hard key derivation" },
-  { icon: Hash, label: "BLAKE3", desc: "Cryptographic integrity" },
-];
+export default function Home({ onNavigate, onNavigateWithFiles }: HomeProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
-export default function Home({ onNavigate }: HomeProps) {
+  // Tauri drag-drop: listen for files dropped on the home screen
+  const setupDropListener = useCallback(() => {
+    const unlisten = listen<{ paths: string[] }>("tauri://drag-drop", (e) => {
+      const paths = e.payload?.paths ?? [];
+      if (paths.length > 0 && onNavigateWithFiles) {
+        onNavigateWithFiles(paths);
+      }
+    });
+    return unlisten;
+  }, [onNavigateWithFiles]);
+
+  // Track drag state for visual feedback
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
+    if (dragCounter.current === 1) setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const paths: string[] = [];
+    for (const item of Array.from(e.dataTransfer.files)) {
+      if ((item as unknown as { path?: string }).path) {
+        paths.push((item as unknown as { path: string }).path);
+      }
+    }
+    if (paths.length > 0 && onNavigateWithFiles) {
+      onNavigateWithFiles(paths);
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void setupDropListener;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-8 py-12">
-      {/* Hero */}
-      <div className="text-center mb-16 animate-slide-up">
-        <div className="flex justify-center mb-6">
-          <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center shadow-glow">
-            <ShieldCheck size={40} className="text-accent" />
+    <div
+      className="flex flex-col items-center justify-center min-h-full px-8 py-10"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag-to-create overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-base/90 backdrop-blur-sm border-2 border-dashed border-accent/60 animate-fade-in pointer-events-none">
+          <div className="text-center">
+            <div className="w-20 h-20 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center mx-auto mb-4">
+              <Archive size={36} className="text-accent" />
+            </div>
+            <p className="text-lg font-semibold text-text-primary mb-1">Drop to create archive</p>
+            <p className="text-sm text-text-muted">Files will be encrypted immediately</p>
           </div>
         </div>
-        <h1 className="text-4xl font-bold text-text-primary tracking-tight mb-3">
+      )}
+
+      {/* Hero */}
+      <div className="text-center mb-10 animate-slide-up">
+        <div className="flex justify-center mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center shadow-glow">
+            <ShieldCheck size={32} className="text-accent" />
+          </div>
+        </div>
+        <h1 className="text-3xl font-bold text-text-primary tracking-tight mb-2">
           ANDRII
         </h1>
-        <p className="text-text-secondary text-base max-w-md mx-auto leading-relaxed">
-          Professional secure archive application with military-grade encryption,
-          metadata protection, and integrity verification.
+        <p className="text-text-muted text-sm max-w-xs mx-auto leading-relaxed">
+          Secure your files with encryption that can't be broken.
         </p>
       </div>
 
-      {/* Action Cards */}
-      <div className="grid grid-cols-3 gap-5 w-full max-w-3xl mb-14 animate-slide-up" style={{ animationDelay: "0.05s" }}>
-        <ActionCard
-          icon={Archive}
-          title="Create Archive"
-          description="Compress and encrypt files into a secure .andrii archive"
-          accent="accent"
+      {/* Primary CTA — Create Archive */}
+      <div className="w-full max-w-sm mb-4 animate-slide-up" style={{ animationDelay: "0.05s" }}>
+        <button
           onClick={() => onNavigate("create")}
-          primary
-        />
-        <ActionCard
-          icon={FolderOpen}
-          title="Open Archive"
-          description="Decrypt and extract files from an existing .andrii archive"
-          accent="text-text-secondary"
+          className="w-full group flex items-center gap-4 px-6 py-5 rounded-2xl border bg-accent/10 border-accent/30 hover:bg-accent/18 hover:border-accent/50 hover:shadow-glow transition-all duration-200 text-left"
+        >
+          <div className="w-12 h-12 rounded-xl bg-accent/20 border border-accent/30 flex items-center justify-center shrink-0 group-hover:bg-accent/28 transition-colors">
+            <Archive size={22} className="text-accent" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-accent mb-0.5">Create Archive</p>
+            <p className="text-2xs text-text-muted">Encrypt and compress your files</p>
+          </div>
+          <ArrowRight size={16} className="text-accent/50 group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+        </button>
+      </div>
+
+      {/* Secondary actions — Open and Verify */}
+      <div
+        className="w-full max-w-sm grid grid-cols-2 gap-3 animate-slide-up"
+        style={{ animationDelay: "0.08s" }}
+      >
+        <button
           onClick={() => onNavigate("open")}
-        />
-        <ActionCard
-          icon={ShieldCheck}
-          title="Verify Archive"
-          description="Check integrity and authenticity of an .andrii archive"
-          accent="text-text-secondary"
+          className="group flex flex-col items-start gap-2 px-4 py-4 rounded-xl border bg-bg-surface border-border hover:bg-bg-elevated hover:border-border-strong transition-all duration-200 text-left"
+        >
+          <div className="w-9 h-9 rounded-lg bg-bg-elevated border border-border flex items-center justify-center group-hover:border-border-strong transition-colors">
+            <FolderOpen size={16} className="text-text-secondary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-text-primary">Open Archive</p>
+            <p className="text-2xs text-text-muted mt-0.5">Decrypt and extract</p>
+          </div>
+        </button>
+
+        <button
           onClick={() => onNavigate("verify")}
-        />
+          className="group flex flex-col items-start gap-2 px-4 py-4 rounded-xl border bg-bg-surface border-border hover:bg-bg-elevated hover:border-border-strong transition-all duration-200 text-left"
+        >
+          <div className="w-9 h-9 rounded-lg bg-bg-elevated border border-border flex items-center justify-center group-hover:border-border-strong transition-colors">
+            <ShieldCheck size={16} className="text-text-secondary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-text-primary">Verify Archive</p>
+            <p className="text-2xs text-text-muted mt-0.5">Check integrity</p>
+          </div>
+        </button>
       </div>
 
-      {/* Security Features */}
-      <div className="w-full max-w-3xl animate-slide-up" style={{ animationDelay: "0.1s" }}>
-        <div className="flex items-center gap-4 mb-4">
-          <div className="h-px flex-1 bg-border/60" />
-          <span className="text-2xs font-medium text-text-muted uppercase tracking-widest">
-            Security Profile
-          </span>
-          <div className="h-px flex-1 bg-border/60" />
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {features.map(({ icon: Icon, label, desc }) => (
-            <div
-              key={label}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-surface border border-border/60"
-            >
-              <div className="w-8 h-8 rounded-lg bg-accent/8 border border-accent/12 flex items-center justify-center shrink-0">
-                <Icon size={14} className="text-accent/80" />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-text-primary leading-tight">
-                  {label}
-                </div>
-                <div className="text-2xs text-text-muted mt-0.5">{desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Drop hint */}
+      <p
+        className="mt-6 text-2xs text-text-muted animate-slide-up"
+        style={{ animationDelay: "0.12s" }}
+      >
+        Or drag files here to create an archive instantly
+      </p>
     </div>
-  );
-}
-
-interface ActionCardProps {
-  icon: React.ComponentType<{ size?: number | string; className?: string }>;
-  title: string;
-  description: string;
-  accent: string;
-  onClick: () => void;
-  primary?: boolean;
-}
-
-function ActionCard({ icon: Icon, title, description, onClick, primary }: ActionCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        group flex flex-col items-start p-6 rounded-xl border text-left
-        transition-all duration-200 cursor-pointer
-        ${primary
-          ? "bg-accent/8 border-accent/25 hover:bg-accent/14 hover:border-accent/40 hover:shadow-glow"
-          : "bg-bg-surface border-border hover:bg-bg-elevated hover:border-border-strong"
-        }
-      `}
-    >
-      <div className={`
-        w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-colors
-        ${primary
-          ? "bg-accent/15 border border-accent/25 group-hover:bg-accent/20"
-          : "bg-bg-elevated border border-border group-hover:border-border-strong"
-        }
-      `}>
-        <Icon
-          size={20}
-          className={primary ? "text-accent" : "text-text-secondary group-hover:text-text-primary transition-colors"}
-        />
-      </div>
-      <h3 className={`text-sm font-semibold mb-1.5 ${primary ? "text-accent" : "text-text-primary"}`}>
-        {title}
-      </h3>
-      <p className="text-2xs text-text-muted leading-relaxed">{description}</p>
-    </button>
   );
 }

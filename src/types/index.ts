@@ -5,6 +5,7 @@ export interface PasswordStrengthResult {
   label: string;
   entropy_bits: number;
   estimated_crack_time: string;
+  gpu_crack_time: string;
   has_lowercase: boolean;
   has_uppercase: boolean;
   has_digits: boolean;

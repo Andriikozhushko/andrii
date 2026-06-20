@@ -2,8 +2,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  FolderOpen, Eye, EyeOff, Loader2, FileDown, Download,
-  CheckCircle2, File, Calendar, Layers,
+  FolderOpen, Eye, EyeOff, Loader2, Download,
+  CheckCircle2, File, Calendar, Layers, ShieldCheck, Archive,
 } from "lucide-react";
 
 import type { OpenArchiveResponse, ArchiveFileEntry } from "../types";
@@ -25,6 +25,26 @@ function formatDate(ts: number): string {
   });
 }
 
+function humanizeError(raw: string): string {
+  const s = raw.toLowerCase();
+  if (s.includes("invalid password") || s.includes("invalidpassword")) {
+    return "Incorrect password. Please try again.";
+  }
+  if (s.includes("corrupt") || s.includes("tampered") || s.includes("authentication")) {
+    return "This archive appears to be corrupted or tampered with.";
+  }
+  if (s.includes("no such file") || s.includes("not found") || s.includes("os error 2")) {
+    return "Archive file not found. It may have been moved or deleted.";
+  }
+  if (s.includes("permission") || s.includes("access denied")) {
+    return "Permission denied. Check that you have access to this file.";
+  }
+  if (s.includes("magic") || s.includes("invalidmagic")) {
+    return "This file is not a valid ANDRII archive.";
+  }
+  return "Failed to open archive. Check the file and password, then try again.";
+}
+
 export default function OpenArchive({ onBack }: OpenArchiveProps) {
   const [archivePath, setArchivePath] = useState("");
   const [password, setPassword] = useState("");
@@ -37,6 +57,8 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
 
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<"name" | "size">("name");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleBrowse = async () => {
     const selected = await open({
@@ -66,7 +88,7 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
       });
       setArchiveInfo(info);
     } catch (e) {
-      setError(String(e));
+      setError(humanizeError(String(e)));
     } finally {
       setIsOpening(false);
     }
@@ -107,15 +129,29 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
         },
       });
       const count = extractAll ? archiveInfo.file_count : selectedFiles.size;
-      setExtractSuccess(`Successfully extracted ${count} file${count !== 1 ? "s" : ""} to ${dir}`);
+      setExtractSuccess(`${count} file${count !== 1 ? "s" : ""} extracted to ${dir}`);
     } catch (e) {
-      setError(String(e));
+      setError(humanizeError(String(e)));
     } finally {
       setIsExtracting(false);
     }
   };
 
   const canOpen = archivePath.length > 0 && password.length > 0 && !isOpening;
+
+  const filteredEntries = archiveInfo
+    ? archiveInfo.entries
+        .filter((e) => !searchQuery || e.path.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) =>
+          sortKey === "size"
+            ? b.original_size - a.original_size
+            : a.path.localeCompare(b.path)
+        )
+    : [];
+
+  const compressionSaved = archiveInfo
+    ? (1 - archiveInfo.total_compressed_size / archiveInfo.total_original_size) * 100
+    : 0;
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -203,7 +239,7 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
             )}
           </button>
           <button onClick={onBack} className="btn-secondary w-full justify-center text-xs">
-            Cancel
+            Back
           </button>
         </div>
       </div>
@@ -211,63 +247,104 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
       {/* Right: file list */}
       <div className="flex-1 flex flex-col px-8 py-6 overflow-hidden">
         {!archiveInfo ? (
+          // Empty state — instructional
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-2xl bg-bg-elevated border border-border flex items-center justify-center mb-4">
-              <FileDown size={28} className="text-text-muted" />
+            <div className="w-20 h-20 rounded-2xl bg-bg-elevated border border-border flex items-center justify-center mb-5">
+              <Archive size={32} className="text-text-muted" />
             </div>
-            <p className="text-sm text-text-secondary mb-1">No archive open</p>
-            <p className="text-2xs text-text-muted">Select a .andrii file and enter the password</p>
+            <p className="text-sm font-medium text-text-secondary mb-2">No archive open</p>
+            <p className="text-2xs text-text-muted max-w-xs leading-relaxed">
+              Select a .andrii file and enter its password on the left, then click Open Archive.
+            </p>
+            <div className="mt-6 space-y-2 text-left max-w-xs w-full">
+              <StepHint n={1} label="Choose a .andrii file" />
+              <StepHint n={2} label="Enter the archive password" />
+              <StepHint n={3} label="Select files and extract" />
+            </div>
           </div>
         ) : (
           <>
-            {/* Archive metadata */}
-            <div className="mb-5 px-4 py-3.5 rounded-xl bg-bg-surface border border-border">
+            {/* Archive summary card */}
+            <div className="mb-5 px-5 py-4 rounded-xl bg-bg-surface border border-border animate-slide-up">
               <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-text-primary">{archiveInfo.archive_name}</h3>
-                  <p className="text-2xs text-text-muted mt-0.5">{archiveInfo.creator_version}</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                    <ShieldCheck size={18} className="text-accent" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-text-primary">{archiveInfo.archive_name}</h3>
+                    <p className="text-2xs text-text-muted mt-0.5">Decrypted · {archiveInfo.creator_version}</p>
+                  </div>
                 </div>
-                <span className="badge badge-success">Decrypted</span>
+                <span className="badge badge-success">Verified</span>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 <MetaStat icon={File} label="Files" value={String(archiveInfo.file_count)} />
                 <MetaStat icon={Layers} label="Original" value={formatBytes(archiveInfo.total_original_size)} />
-                <MetaStat icon={Download} label="Compressed" value={formatBytes(archiveInfo.total_compressed_size)} />
+                <MetaStat icon={Download} label="Archived" value={formatBytes(archiveInfo.total_compressed_size)} />
                 <MetaStat icon={Calendar} label="Created" value={formatDate(archiveInfo.created_at)} />
               </div>
+              {compressionSaved > 0.5 && (
+                <p className="mt-2.5 text-2xs text-success-text">
+                  {compressionSaved.toFixed(1)}% smaller than original
+                </p>
+              )}
             </div>
 
-            {/* File list header */}
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-medium text-text-secondary">
-                {archiveInfo.entries.length} files
-              </span>
-              <div className="flex items-center gap-3">
+            {/* File list header with search + sort */}
+            <div className="flex items-center gap-3 mb-2.5">
+              <input
+                type="text"
+                className="input-field flex-1 text-xs py-1.5"
+                placeholder="Search files…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setSortKey("name")}
+                  className={`text-2xs px-2 py-1 rounded transition-colors ${sortKey === "name" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
+                >
+                  Name
+                </button>
+                <button
+                  onClick={() => setSortKey("size")}
+                  className={`text-2xs px-2 py-1 rounded transition-colors ${sortKey === "size" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
+                >
+                  Size
+                </button>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={selectAll}
                   className="text-2xs text-accent hover:text-accent-hover transition-colors"
                 >
-                  Select all
+                  All
                 </button>
+                <span className="text-border text-2xs">|</span>
                 <button
                   onClick={() => setSelectedFiles(new Set())}
                   className="text-2xs text-text-muted hover:text-text-secondary transition-colors"
                 >
-                  Clear
+                  None
                 </button>
               </div>
             </div>
 
             {/* File list */}
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-              {archiveInfo.entries.map((entry) => (
-                <FileRow
-                  key={entry.path}
-                  entry={entry}
-                  selected={selectedFiles.has(entry.path)}
-                  onToggle={toggleFile}
-                />
-              ))}
+              {filteredEntries.length === 0 ? (
+                <p className="text-2xs text-text-muted text-center py-6">No files match your search.</p>
+              ) : (
+                filteredEntries.map((entry) => (
+                  <FileRow
+                    key={entry.path}
+                    entry={entry}
+                    selected={selectedFiles.has(entry.path)}
+                    onToggle={toggleFile}
+                  />
+                ))
+              )}
             </div>
 
             {/* Extract buttons */}
@@ -298,6 +375,17 @@ export default function OpenArchive({ onBack }: OpenArchiveProps) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function StepHint({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-5 h-5 rounded-full bg-bg-elevated border border-border text-2xs text-text-muted flex items-center justify-center shrink-0 font-mono">
+        {n}
+      </span>
+      <span className="text-2xs text-text-muted">{label}</span>
     </div>
   );
 }

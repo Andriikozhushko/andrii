@@ -15,6 +15,7 @@ import type {
 
 interface CreateArchiveProps {
   onBack: () => void;
+  initialFiles?: string[];
 }
 
 const COMPRESSION_OPTIONS: {
@@ -28,8 +29,8 @@ const COMPRESSION_OPTIONS: {
   { level: "Maximum", icon: Mountain, label: "Maximum", desc: "Smallest size" },
 ];
 
-export default function CreateArchive({ onBack }: CreateArchiveProps) {
-  const [files, setFiles] = useState<string[]>([]);
+export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchiveProps) {
+  const [files, setFiles] = useState<string[]>(initialFiles);
   const [archiveName, setArchiveName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -160,10 +161,6 @@ export default function CreateArchive({ onBack }: CreateArchiveProps) {
       {/* Right panel: password & create */}
       <div className="w-80 flex flex-col px-7 py-6 overflow-y-auto shrink-0">
         <div className="flex-1 space-y-5">
-          <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
-            Encryption
-          </h3>
-
           {/* Password */}
           <div>
             <label className="label">Password</label>
@@ -215,8 +212,8 @@ export default function CreateArchive({ onBack }: CreateArchiveProps) {
                 <span className="text-2xs text-text-secondary font-medium">{compression}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-2xs text-text-muted">Encryption</span>
-                <span className="text-2xs text-accent font-medium">XChaCha20-P1305</span>
+                <span className="text-2xs text-text-muted">Protection</span>
+                <span className="text-2xs text-success-text font-medium">End-to-end encrypted</span>
               </div>
             </div>
           )}
@@ -268,7 +265,7 @@ export default function CreateArchive({ onBack }: CreateArchiveProps) {
             )}
           </button>
           <button onClick={onBack} className="btn-secondary w-full justify-center text-xs">
-            Cancel
+            {isCreating ? "Cancel" : "Back"}
           </button>
         </div>
       </div>

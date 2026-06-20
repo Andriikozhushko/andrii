@@ -1,4 +1,4 @@
-import { ShieldCheck, Lock, Key, Hash, FileArchive, X, Copy, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, FileArchive, X, Copy, CheckCircle2, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { CreateArchiveResponse, PasswordStrengthResult } from "../types";
 
@@ -16,13 +16,50 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-const SCORE_COLOR: Record<number, string> = {
-  0: "text-danger-text",
-  1: "text-warning-text",
-  2: "text-yellow-300",
-  3: "text-success-text",
-  4: "text-teal-300",
-};
+function computeSecurityScore(passwordScore: number | null): {
+  score: number;
+  label: "Perfect" | "Excellent" | "Good" | "Moderate";
+  color: string;
+  ringColor: string;
+  note: string;
+} {
+  // Crypto base: XChaCha20-Poly1305 + Argon2id + BLAKE3 = 70 points
+  // Password adds 0-30 points
+  const pwContrib = passwordScore === null ? 15
+    : [0, 7, 14, 22, 30][passwordScore] ?? 0;
+  const score = 70 + pwContrib;
+
+  if (score >= 100) return { score, label: "Perfect", color: "text-teal-300", ringColor: "stroke-teal-400", note: "Maximum achievable security" };
+  if (score >= 90) return { score, label: "Excellent", color: "text-success-text", ringColor: "stroke-success", note: "Your archive is extremely secure" };
+  if (score >= 77) return { score, label: "Good", color: "text-accent", ringColor: "stroke-accent", note: "Strong protection — consider a longer password" };
+  return { score, label: "Moderate", color: "text-warning-text", ringColor: "stroke-warning", note: "Use a stronger password for maximum security" };
+}
+
+function CircleScore({ score, color, ringColor }: { score: number; color: string; ringColor: string }) {
+  const r = 36;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+  return (
+    <svg width="100" height="100" className="-rotate-90">
+      <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="7" className="text-bg-base" />
+      <circle
+        cx="50" cy="50" r={r} fill="none" strokeWidth="7"
+        className={ringColor}
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        style={{ transition: "stroke-dasharray 0.6s ease" }}
+      />
+      <text
+        x="50" y="50" textAnchor="middle" dominantBaseline="middle"
+        className={`rotate-90 fill-current ${color} font-bold text-[18px]`}
+        style={{ fontSize: 18, fontFamily: "inherit" }}
+        transform="rotate(90 50 50)"
+      >
+        {score}
+      </text>
+    </svg>
+  );
+}
 
 export default function SecurityReport({
   result,
@@ -31,16 +68,24 @@ export default function SecurityReport({
   onClose,
 }: SecurityReportProps) {
   const [copied, setCopied] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
 
   const compressionPct = result.compression_ratio > 0
     ? `${(result.compression_ratio * 100).toFixed(1)}% smaller`
     : "No reduction";
+
+  const { score, label, color, ringColor, note } = computeSecurityScore(
+    password ? password.score : null
+  );
 
   const handleCopyPath = () => {
     navigator.clipboard.writeText(result.output_path);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const SCORE_COLORS = ["text-danger-text", "text-warning-text", "text-yellow-300", "text-success-text", "text-teal-300"];
+  const BAR_COLORS = ["bg-danger", "bg-warning", "bg-yellow-500", "bg-success", "bg-teal-500"];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -53,7 +98,7 @@ export default function SecurityReport({
             </div>
             <div>
               <h2 className="text-sm font-semibold text-text-primary">Archive Created</h2>
-              <p className="text-2xs text-text-muted">Security Report</p>
+              <p className="text-2xs text-text-muted">Your files are protected</p>
             </div>
           </div>
           <button
@@ -64,8 +109,27 @@ export default function SecurityReport({
           </button>
         </div>
 
-        {/* Content */}
         <div className="px-6 py-5 space-y-5">
+          {/* Security Score — primary visual */}
+          <div className="flex items-center gap-5 px-5 py-4 rounded-xl bg-bg-base border border-border/60">
+            <CircleScore score={score} color={color} ringColor={ringColor} />
+            <div className="flex-1">
+              <p className="text-xs text-text-muted mb-0.5">Security Score</p>
+              <p className={`text-2xl font-bold ${color} leading-none mb-1`}>{label}</p>
+              <p className="text-2xs text-text-muted leading-relaxed">{note}</p>
+              {password && (
+                <div className="flex gap-1 mt-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className={`h-1 flex-1 rounded-full ${i <= password.score ? BAR_COLORS[password.score] ?? "bg-border" : "bg-border"}`} />
+                  ))}
+                  <span className={`text-2xs font-medium ml-1 ${SCORE_COLORS[password.score] ?? "text-text-muted"}`}>
+                    {password.label} password
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Archive info */}
           <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-base border border-border/60">
             <FileArchive size={16} className="text-accent shrink-0" />
@@ -86,45 +150,34 @@ export default function SecurityReport({
             </button>
           </div>
 
-          {/* Security profile */}
-          <div>
-            <p className="label mb-3">Security Profile</p>
-            <div className="space-y-2">
-              <SecurityRow icon={Lock} label="Encryption" value="XChaCha20-Poly1305" status="ok" />
-              <SecurityRow icon={Key} label="Key Derivation" value="Argon2id (64 MiB, 3×, 4 lanes)" status="ok" />
-              <SecurityRow icon={Hash} label="Integrity" value="BLAKE3 (archive + per-file)" status="ok" />
-              <SecurityRow icon={Lock} label="Metadata" value="Fully encrypted" status="ok" />
-              <SecurityRow icon={FileArchive} label="Compression" value={compressionLabel} status="info" />
-            </div>
+          {/* What's protected summary */}
+          <div className="space-y-2">
+            <ProtectionRow label="File contents encrypted" />
+            <ProtectionRow label="File names hidden" />
+            <ProtectionRow label="Archive integrity verified" />
           </div>
 
-          {/* Password strength */}
-          {password && (
-            <div className="px-4 py-3 rounded-lg bg-bg-base border border-border/60">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xs font-medium text-text-secondary uppercase tracking-wider">
-                  Password Strength
-                </span>
-                <span className={`text-xs font-semibold ${SCORE_COLOR[password.score] ?? "text-text-secondary"}`}>
-                  {password.label}
-                </span>
+          {/* Technical Details — collapsible */}
+          <div className="rounded-lg border border-border/60 overflow-hidden">
+            <button
+              onClick={() => setShowTechDetails(!showTechDetails)}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-bg-base hover:bg-bg-elevated transition-colors text-left"
+            >
+              <span className="text-2xs font-medium text-text-muted uppercase tracking-wider">Technical Details</span>
+              <ChevronDown
+                size={13}
+                className={`text-text-muted transition-transform duration-200 ${showTechDetails ? "rotate-180" : ""}`}
+              />
+            </button>
+            {showTechDetails && (
+              <div className="px-4 py-3 border-t border-border/40 space-y-2 bg-bg-base animate-fade-in">
+                <TechRow label="Encryption" value="XChaCha20-Poly1305" />
+                <TechRow label="Key Derivation" value="Argon2id (64 MiB, 3×, 4 lanes)" />
+                <TechRow label="Integrity" value="BLAKE3 (archive + per-file)" />
+                <TechRow label="Compression" value={compressionLabel} />
               </div>
-              <div className="flex gap-1 mb-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1 flex-1 rounded-full ${i <= password.score ? getBarColor(password.score) : "bg-border"}`}
-                  />
-                ))}
-              </div>
-              <p className="text-2xs text-text-muted">
-                Estimated resistance:{" "}
-                <span className={`font-medium ${SCORE_COLOR[password.score]}`}>
-                  {password.estimated_crack_time}
-                </span>
-              </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Footer */}
@@ -138,34 +191,20 @@ export default function SecurityReport({
   );
 }
 
-function getBarColor(score: number): string {
-  if (score <= 0) return "bg-danger";
-  if (score === 1) return "bg-warning";
-  if (score === 2) return "bg-yellow-500";
-  if (score === 3) return "bg-success";
-  return "bg-teal-500";
-}
-
-interface SecurityRowProps {
-  icon: React.ComponentType<{ size?: number | string; className?: string }>;
-  label: string;
-  value: string;
-  status: "ok" | "warn" | "info";
-}
-
-function SecurityRow({ icon: Icon, label, value, status }: SecurityRowProps) {
-  const statusIcon = {
-    ok: <CheckCircle2 size={13} className="text-success shrink-0" />,
-    warn: <CheckCircle2 size={13} className="text-warning shrink-0" />,
-    info: <CheckCircle2 size={13} className="text-accent shrink-0" />,
-  }[status];
-
+function ProtectionRow({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      {statusIcon}
-      <Icon size={13} className="text-text-muted shrink-0" />
+      <CheckCircle2 size={13} className="text-success shrink-0" />
+      <span className="text-2xs text-text-secondary">{label}</span>
+    </div>
+  );
+}
+
+function TechRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2">
       <span className="text-2xs text-text-muted min-w-[110px]">{label}</span>
-      <span className="text-2xs text-text-secondary font-medium">{value}</span>
+      <span className="text-2xs text-text-secondary font-mono">{value}</span>
     </div>
   );
 }

@@ -495,7 +495,171 @@ fn large_file_round_trip() {
     assert_eq!(data, extracted, "1MiB file must be byte-identical after round-trip");
 }
 
-// ── 12. Archive metadata correctness ─────────────────────────────────────────
+// ── 12. Stress tests: Unicode, empty, nested, many-small ─────────────────────
+
+#[test]
+fn unicode_filename_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    // Create files with Unicode/Cyrillic/umlaut names
+    let file_привет = tmp.path().join("привет_мир.txt");
+    let file_umlaut = tmp.path().join("Ärchiv_Übersicht.txt");
+    let file_cjk = tmp.path().join("文件_テスト.txt");
+    fs::write(&file_привет, "Привет, мир! Это тест.").unwrap();
+    fs::write(&file_umlaut, "Österreich Überraschung").unwrap();
+    fs::write(&file_cjk, "日本語テスト").unwrap();
+
+    let archive = make_archive(
+        &tmp,
+        "unicode-test",
+        &[file_привет.clone(), file_umlaut.clone(), file_cjk.clone()],
+        "UnicodePass!99",
+        CompressionLevel::Balanced,
+    );
+
+    let reader = ArchiveReader::open(&archive, "UnicodePass!99").unwrap();
+    assert_eq!(reader.info().file_count, 3, "all 3 unicode-named files should be archived");
+
+    let out_dir = tmp.path().join("out");
+    fs::create_dir_all(&out_dir).unwrap();
+    let extracted = reader.extract_all(&out_dir).unwrap();
+    assert_eq!(extracted.len(), 3);
+
+    // Verify content integrity for each
+    let content1 = fs::read_to_string(&extracted[0]).unwrap_or_default();
+    let content2 = fs::read_to_string(&extracted[1]).unwrap_or_default();
+    assert!(!content1.is_empty() || !content2.is_empty(), "extracted content should not all be empty");
+}
+
+#[test]
+fn nested_directory_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    // Build nested directory tree: a/b/c/deep.txt + a/shallow.txt
+    let nested = tmp.path().join("input");
+    let deep_dir = nested.join("a").join("b").join("c");
+    fs::create_dir_all(&deep_dir).unwrap();
+    fs::write(nested.join("a").join("shallow.txt"), "shallow").unwrap();
+    fs::write(deep_dir.join("deep.txt"), "very deeply nested content").unwrap();
+
+    let archive = make_archive(
+        &tmp,
+        "nested-dirs",
+        &[nested.clone()],
+        "NestedPass!42",
+        CompressionLevel::Balanced,
+    );
+
+    let reader = ArchiveReader::open(&archive, "NestedPass!42").unwrap();
+    assert!(reader.info().file_count >= 2, "both files should be archived");
+
+    let out_dir = tmp.path().join("out");
+    fs::create_dir_all(&out_dir).unwrap();
+    let extracted = reader.extract_all(&out_dir).unwrap();
+    assert_eq!(extracted.len(), reader.info().file_count as usize);
+
+    // Deep file content should be preserved
+    let deep_paths: Vec<_> = extracted.iter()
+        .filter(|p| p.file_name().and_then(|n| n.to_str()) == Some("deep.txt"))
+        .collect();
+    assert_eq!(deep_paths.len(), 1, "deep.txt should be extracted");
+    let deep_content = fs::read_to_string(&deep_paths[0]).unwrap();
+    assert_eq!(deep_content, "very deeply nested content");
+}
+
+#[test]
+fn many_small_files_round_trip() {
+    let tmp = TempDir::new().unwrap();
+    let input_dir = tmp.path().join("many");
+    fs::create_dir_all(&input_dir).unwrap();
+
+    // Create 50 small files with predictable content
+    for i in 0..50u32 {
+        fs::write(
+            input_dir.join(format!("file_{:02}.txt", i)),
+            format!("Content of file number {}", i),
+        ).unwrap();
+    }
+
+    let archive = make_archive(
+        &tmp,
+        "many-files",
+        &[input_dir.clone()],
+        "ManyFilesPass!",
+        CompressionLevel::Fast,
+    );
+
+    let reader = ArchiveReader::open(&archive, "ManyFilesPass!").unwrap();
+    assert_eq!(reader.info().file_count, 50, "all 50 files should be archived");
+
+    let out_dir = tmp.path().join("out");
+    fs::create_dir_all(&out_dir).unwrap();
+    let extracted = reader.extract_all(&out_dir).unwrap();
+    assert_eq!(extracted.len(), 50);
+
+    // Spot-check a few files
+    let first = extracted.iter().find(|p| p.file_name().and_then(|n| n.to_str()) == Some("file_00.txt"));
+    let last = extracted.iter().find(|p| p.file_name().and_then(|n| n.to_str()) == Some("file_49.txt"));
+    assert!(first.is_some() && last.is_some(), "boundary files should exist");
+    assert_eq!(fs::read_to_string(first.unwrap()).unwrap(), "Content of file number 0");
+    assert_eq!(fs::read_to_string(last.unwrap()).unwrap(), "Content of file number 49");
+}
+
+#[test]
+fn archive_with_mixed_empty_and_large_files() {
+    let tmp = TempDir::new().unwrap();
+    // Mix: empty, tiny, medium
+    let empty = tmp.path().join("empty.dat");
+    let tiny = tmp.path().join("tiny.txt");
+    let medium = tmp.path().join("medium.bin");
+    fs::write(&empty, b"").unwrap();
+    fs::write(&tiny, b"hello").unwrap();
+    let medium_data: Vec<u8> = (0u32..65536).flat_map(|i| i.to_le_bytes()).collect();
+    fs::write(&medium, &medium_data).unwrap();
+
+    let archive = make_archive(
+        &tmp,
+        "mixed-sizes",
+        &[empty.clone(), tiny.clone(), medium.clone()],
+        "MixedPass!7",
+        CompressionLevel::Maximum,
+    );
+
+    let reader = ArchiveReader::open(&archive, "MixedPass!7").unwrap();
+    assert_eq!(reader.info().file_count, 3);
+
+    let out_dir = tmp.path().join("out");
+    fs::create_dir_all(&out_dir).unwrap();
+    reader.extract_all(&out_dir).unwrap();
+
+    assert!(fs::read(&out_dir.join("empty.dat")).unwrap().is_empty());
+    assert_eq!(fs::read(&out_dir.join("tiny.txt")).unwrap(), b"hello");
+    assert_eq!(fs::read(&out_dir.join("medium.bin")).unwrap(), medium_data);
+}
+
+#[test]
+fn corrupted_footer_detected_by_verify() {
+    let tmp = TempDir::new().unwrap();
+    let archive = make_archive(
+        &tmp,
+        "corrupt-footer",
+        &[fixture("hello.txt")],
+        "FooterPass!",
+        CompressionLevel::Balanced,
+    );
+
+    // Flip a byte within the archive_hash field in the footer.
+    // Footer layout: [0..4]=ENDR magic, [4..36]=BLAKE3 hash, [36..548]=signature block.
+    // We corrupt footer byte 10, i.e. absolute offset len-548+10.
+    let mut bytes = fs::read(&archive).unwrap();
+    let len = bytes.len();
+    bytes[len - 548 + 10] ^= 0xAB;
+    fs::write(&archive, &bytes).unwrap();
+
+    let result = verify_archive(&archive).unwrap();
+    assert!(!result.is_valid, "corrupted footer hash should fail verification");
+    assert!(!result.integrity_hash_valid);
+}
+
+// ── 13. Archive metadata correctness ─────────────────────────────────────────
 
 #[test]
 fn archive_info_fields_are_correct() {

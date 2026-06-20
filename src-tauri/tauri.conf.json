@@ -38,6 +38,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["andrii"],
+        "name": "ANDRII Archive",
+        "description": "ANDRII Encrypted Archive",
+        "mimeType": "application/x-andrii-archive"
+      }
+    ],
     "category": "Utility",
     "shortDescription": "Professional secure archive with encryption",
     "longDescription": "ANDRII is a production-grade secure archive application combining XChaCha20-Poly1305 encryption, Argon2id key derivation, Zstandard compression, and BLAKE3 integrity verification."
