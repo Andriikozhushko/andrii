@@ -1,33 +1,32 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { save } from "@tauri-apps/plugin-dialog";
-import {
-  Archive, Eye, EyeOff, Zap, Scale, Mountain, Loader2,
-} from "lucide-react";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { Archive, Eye, EyeOff, Loader2, Folder, File, X, Plus, FolderOpen } from "lucide-react";
 
-import FileDropzone from "../components/FileDropzone";
 import PasswordStrength from "../components/PasswordStrength";
 import SecurityReport from "../components/SecurityReport";
-import type {
-  CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
-} from "../types";
+import type { CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent } from "../types";
 
 interface CreateArchiveProps {
   onBack: () => void;
   initialFiles?: string[];
+  onNavigateWithFiles?: (files: string[]) => void;
 }
 
-const COMPRESSION_OPTIONS: {
-  level: CompressionLevel;
-  icon: React.ComponentType<{ size?: number | string; className?: string }>;
-  label: string;
-  desc: string;
-}[] = [
-  { level: "Fast", icon: Zap, label: "Fast", desc: "Speed priority" },
-  { level: "Balanced", icon: Scale, label: "Balanced", desc: "Best overall" },
-  { level: "Maximum", icon: Mountain, label: "Maximum", desc: "Smallest size" },
+const COMPRESSION_OPTS: { level: CompressionLevel; label: string; desc: string }[] = [
+  { level: "Fast", label: "Fast", desc: "Speed priority" },
+  { level: "Balanced", label: "Balanced", desc: "Recommended" },
+  { level: "Maximum", label: "Maximum", desc: "Smallest output" },
 ];
+
+function basename(path: string): string {
+  return path.replace(/\\/g, "/").split("/").pop() ?? path;
+}
+function isDir(path: string): boolean {
+  const last = basename(path);
+  return !last.includes(".");
+}
 
 export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchiveProps) {
   const [files, setFiles] = useState<string[]>(initialFiles);
@@ -43,6 +42,9 @@ export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchi
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CreateArchiveResponse | null>(null);
 
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
   const canCreate =
     files.length > 0 &&
@@ -51,14 +53,53 @@ export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchi
     password === confirmPassword &&
     !isCreating;
 
+  const addPaths = useCallback((paths: string[]) => {
+    setFiles((prev) => [...prev, ...paths.filter((p) => !prev.includes(p))]);
+  }, []);
+
+  const handleAddFiles = async () => {
+    const selected = await open({ multiple: true, directory: false });
+    if (!selected) return;
+    addPaths(Array.isArray(selected) ? selected : [selected]);
+  };
+
+  const handleAddFolder = async () => {
+    const selected = await open({ multiple: false, directory: true });
+    if (!selected) return;
+    const path = Array.isArray(selected) ? selected[0] : selected;
+    if (path) addPaths([path]);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
+    if (dragCounter.current === 1) setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const paths: string[] = [];
+    for (const item of Array.from(e.dataTransfer.files)) {
+      if ((item as unknown as { path?: string }).path) {
+        paths.push((item as unknown as { path: string }).path);
+      }
+    }
+    if (paths.length > 0) addPaths(paths);
+  };
+
   const handleCreate = async () => {
     if (!canCreate) return;
-
     const outputPath = await save({
       defaultPath: `${archiveName.trim()}.andrii`,
       filters: [{ name: "ANDRII Archive", extensions: ["andrii"] }],
     });
-
     if (!outputPath) return;
 
     setIsCreating(true);
@@ -100,75 +141,161 @@ export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchi
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left panel: file selection */}
-      <div className="flex-1 flex flex-col px-8 py-6 border-r border-border/50 overflow-y-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-            <Archive size={18} className="text-accent" />
+    <div
+      className="flex h-full"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-bg-base/80 backdrop-blur-sm border-2 border-dashed border-accent/50 pointer-events-none animate-fade-in">
+          <div className="text-center">
+            <Archive size={32} className="text-accent mx-auto mb-2" />
+            <p className="text-sm font-medium text-text-primary">Drop to add to archive</p>
           </div>
+        </div>
+      )}
+
+      {/* Left: files + settings */}
+      <div className="flex-1 flex flex-col border-r border-border overflow-hidden">
+        {/* Page header */}
+        <div className="px-6 py-4 border-b border-border bg-bg-surface shrink-0">
+          <h1 className="text-base font-semibold text-text-primary">New Archive</h1>
+          <p className="text-2xs text-text-muted mt-0.5">Add files, set a password, and create an encrypted .andrii archive</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          {/* Archive name */}
           <div>
-            <h2 className="section-title">Create Archive</h2>
-            <p className="text-2xs text-text-muted mt-0.5">Add files and set encryption options</p>
+            <label className="field-label">Archive Name</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="my-backup"
+              value={archiveName}
+              onChange={(e) => setArchiveName(e.target.value)}
+            />
           </div>
-        </div>
 
-        {/* Archive name */}
-        <div className="mb-5">
-          <label className="label">Archive Name</label>
-          <input
-            type="text"
-            className="input-field"
-            placeholder="my-backup"
-            value={archiveName}
-            onChange={(e) => setArchiveName(e.target.value)}
-          />
-        </div>
+          {/* Files section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="field-label mb-0">Files & Folders</label>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setFiles([])}
+                  className="text-2xs text-text-muted hover:text-danger transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
 
-        {/* File dropzone */}
-        <div className="mb-5">
-          <label className="label">Files & Folders</label>
-          <FileDropzone files={files} onFilesChange={setFiles} />
-        </div>
+            {/* File table */}
+            {files.length > 0 ? (
+              <div className="border border-border rounded-md overflow-hidden mb-2">
+                <table className="file-table">
+                  <thead>
+                    <tr>
+                      <th className="w-6 pr-0"></th>
+                      <th>Name</th>
+                      <th className="w-16 text-right">Type</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {files.map((path) => {
+                      const name = basename(path);
+                      const dir = isDir(path);
+                      return (
+                        <tr key={path} className="group">
+                          <td className="pl-3 pr-0">
+                            {dir
+                              ? <Folder size={13} className="text-accent/70" />
+                              : <File size={13} className="text-text-muted" />}
+                          </td>
+                          <td className="font-mono text-xs truncate max-w-[240px]" title={path}>{name}</td>
+                          <td className="text-right text-text-muted text-2xs pr-2">{dir ? "Folder" : "File"}</td>
+                          <td className="pr-2">
+                            <button
+                              type="button"
+                              onClick={() => setFiles(files.filter((f) => f !== path))}
+                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-danger-muted text-text-muted hover:text-danger transition-all"
+                            >
+                              <X size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="border border-dashed border-border rounded-md py-8 text-center mb-2">
+                <p className="text-sm text-text-muted">No files added yet</p>
+                <p className="text-2xs text-text-muted mt-1">Drag files here or use the buttons below</p>
+              </div>
+            )}
 
-        {/* Compression */}
-        <div>
-          <label className="label">Compression Profile</label>
-          <div className="grid grid-cols-3 gap-2">
-            {COMPRESSION_OPTIONS.map(({ level, icon: Icon, label, desc }) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() => setCompression(level)}
-                className={`
-                  flex flex-col items-center gap-1.5 py-3 px-3 rounded-lg border text-center
-                  transition-all duration-150
-                  ${compression === level
-                    ? "bg-accent/10 border-accent/30 text-accent"
-                    : "bg-bg-base border-border text-text-muted hover:border-border-strong hover:text-text-secondary"
-                  }
-                `}
-              >
-                <Icon size={16} />
-                <span className="text-xs font-medium">{label}</span>
-                <span className="text-2xs opacity-70">{desc}</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleAddFiles} className="btn-secondary text-xs py-1.5 px-3 gap-1">
+                <Plus size={12} /> Add Files
               </button>
-            ))}
+              <button type="button" onClick={handleAddFolder} className="btn-secondary text-xs py-1.5 px-3 gap-1">
+                <FolderOpen size={12} /> Add Folder
+              </button>
+              {files.length > 0 && (
+                <span className="ml-auto text-2xs text-text-muted self-center">
+                  {files.length} item{files.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Compression */}
+          <div>
+            <label className="field-label">Compression</label>
+            <div className="flex gap-1.5">
+              {COMPRESSION_OPTS.map(({ level, label, desc }) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setCompression(level)}
+                  className={`flex-1 py-2 px-3 rounded-md border text-left transition-colors duration-100 ${
+                    compression === level
+                      ? "border-accent bg-accent-muted text-accent"
+                      : "border-border bg-bg-surface text-text-secondary hover:bg-bg-elevated"
+                  }`}
+                >
+                  <div className="text-xs font-medium">{label}</div>
+                  <div className="text-2xs opacity-70 mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right panel: password & create */}
-      <div className="w-80 flex flex-col px-7 py-6 overflow-y-auto shrink-0">
-        <div className="flex-1 space-y-5">
-          {/* Password */}
+      {/* Right: password + create */}
+      <div className="w-64 flex flex-col bg-bg-surface shrink-0">
+        <div className="px-5 py-4 border-b border-border shrink-0">
+          <h2 className="text-sm font-semibold text-text-primary">Password</h2>
+          <p className="text-2xs text-text-muted mt-0.5">Required to open the archive</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Password field */}
           <div>
-            <label className="label">Password</label>
+            <label className="field-label">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                className="input-field pr-10"
-                placeholder="Enter strong password"
+                className="input-field pr-9"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
@@ -176,60 +303,55 @@ export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchi
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
               >
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
             <PasswordStrength password={password} onResult={setPasswordAnalysis} />
           </div>
 
-          {/* Confirm password */}
+          {/* Confirm */}
           <div>
-            <label className="label">Confirm Password</label>
+            <label className="field-label">Confirm Password</label>
             <input
               type={showPassword ? "text" : "password"}
-              className={`input-field ${passwordMismatch ? "border-danger focus:border-danger focus:ring-danger/30" : ""}`}
+              className={`input-field ${passwordMismatch ? "border-danger focus:border-danger focus:ring-danger/20" : ""}`}
               placeholder="Repeat password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
             />
             {passwordMismatch && (
-              <p className="text-2xs text-danger-text mt-1.5">Passwords do not match</p>
+              <p className="text-2xs text-danger-text mt-1">Passwords do not match</p>
             )}
           </div>
 
           {/* Summary */}
           {files.length > 0 && (
-            <div className="px-3 py-3 rounded-lg bg-bg-base border border-border/60 space-y-1">
+            <div className="text-2xs text-text-muted space-y-1 pt-1 border-t border-border">
               <div className="flex justify-between">
-                <span className="text-2xs text-text-muted">Files</span>
-                <span className="text-2xs text-text-secondary font-medium">{files.length}</span>
+                <span>Items</span><span className="text-text-secondary font-medium">{files.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-2xs text-text-muted">Compression</span>
-                <span className="text-2xs text-text-secondary font-medium">{compression}</span>
+                <span>Compression</span><span className="text-text-secondary font-medium">{compression}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-2xs text-text-muted">Protection</span>
-                <span className="text-2xs text-success-text font-medium">End-to-end encrypted</span>
+                <span>Protection</span><span className="text-success-text font-medium">End-to-end</span>
               </div>
             </div>
           )}
 
           {/* Progress */}
           {isCreating && progress && (
-            <div className="px-3 py-3 rounded-lg bg-accent/5 border border-accent/15 space-y-2">
-              <div className="flex items-center justify-between text-2xs">
-                <span className="text-text-muted">Encrypting</span>
-                <span className="text-accent font-mono">
-                  {progress.current}/{progress.total}
-                </span>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-2xs text-text-muted">
+                <span>Encrypting…</span>
+                <span className="font-mono">{progress.current}/{progress.total}</span>
               </div>
-              <div className="h-1 bg-bg-base rounded-full overflow-hidden">
+              <div className="h-1 bg-bg-base rounded-full overflow-hidden border border-border">
                 <div
-                  className="h-full bg-accent rounded-full transition-all duration-300"
+                  className="h-full bg-accent rounded-full transition-all duration-200"
                   style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }}
                 />
               </div>
@@ -239,32 +361,26 @@ export default function CreateArchive({ onBack, initialFiles = [] }: CreateArchi
 
           {/* Error */}
           {error && (
-            <div className="px-3 py-3 rounded-lg bg-danger-muted border border-danger/20">
+            <div className="px-3 py-2 rounded-md bg-danger-muted border border-danger/20">
               <p className="text-2xs text-danger-text leading-relaxed">{error}</p>
             </div>
           )}
         </div>
 
         {/* Action buttons */}
-        <div className="pt-5 space-y-2 border-t border-border/40 mt-5">
+        <div className="px-5 py-4 border-t border-border space-y-2 shrink-0">
           <button
             onClick={handleCreate}
             disabled={!canCreate}
-            className="btn-primary w-full justify-center"
+            className="btn-primary w-full text-sm"
           >
             {isCreating ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                Creating Archive…
-              </>
+              <><Loader2 size={14} className="animate-spin" /> Creating…</>
             ) : (
-              <>
-                <Archive size={15} />
-                Create Archive
-              </>
+              <><Archive size={14} /> Create .andrii Archive</>
             )}
           </button>
-          <button onClick={onBack} className="btn-secondary w-full justify-center text-xs">
+          <button onClick={onBack} className="btn-ghost w-full text-xs text-text-muted">
             {isCreating ? "Cancel" : "Back"}
           </button>
         </div>

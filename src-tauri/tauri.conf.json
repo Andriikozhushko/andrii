@@ -46,8 +46,10 @@
         "mimeType": "application/x-andrii-archive"
       }
     ],
+    "publisher": "Andrii Kozhushko",
+    "copyright": "Copyright 2026 Andrii Kozhushko",
     "category": "Utility",
-    "shortDescription": "Professional secure archive with encryption",
-    "longDescription": "ANDRII is a production-grade secure archive application combining XChaCha20-Poly1305 encryption, Argon2id key derivation, Zstandard compression, and BLAKE3 integrity verification."
+    "shortDescription": "Secure archive utility",
+    "longDescription": "ANDRII is a secure archive utility for Windows. Encrypt, compress, and protect files with XChaCha20-Poly1305 encryption, Argon2id key derivation, and BLAKE3 integrity verification."
   }
 }

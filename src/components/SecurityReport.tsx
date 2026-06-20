@@ -1,5 +1,5 @@
-import { ShieldCheck, FileArchive, X, Copy, CheckCircle2, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { ShieldCheck, FileArchive, X, Copy, CheckCircle2, ChevronDown, AlertTriangle } from "lucide-react";
 import type { CreateArchiveResponse, PasswordStrengthResult } from "../types";
 
 interface SecurityReportProps {
@@ -9,201 +9,182 @@ interface SecurityReportProps {
   onClose: () => void;
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function computeSecurityScore(passwordScore: number | null): {
+function computeScore(pwScore: number | null): {
   score: number;
-  label: "Perfect" | "Excellent" | "Good" | "Moderate";
-  color: string;
-  ringColor: string;
+  label: string;
   note: string;
+  barColor: string;
+  textColor: string;
 } {
-  // Crypto base: XChaCha20-Poly1305 + Argon2id + BLAKE3 = 70 points
-  // Password adds 0-30 points
-  const pwContrib = passwordScore === null ? 15
-    : [0, 7, 14, 22, 30][passwordScore] ?? 0;
-  const score = 70 + pwContrib;
-
-  if (score >= 100) return { score, label: "Perfect", color: "text-teal-300", ringColor: "stroke-teal-400", note: "Maximum achievable security" };
-  if (score >= 90) return { score, label: "Excellent", color: "text-success-text", ringColor: "stroke-success", note: "Your archive is extremely secure" };
-  if (score >= 77) return { score, label: "Good", color: "text-accent", ringColor: "stroke-accent", note: "Strong protection — consider a longer password" };
-  return { score, label: "Moderate", color: "text-warning-text", ringColor: "stroke-warning", note: "Use a stronger password for maximum security" };
+  const contrib = pwScore === null ? 15 : ([0, 7, 14, 22, 30][pwScore] ?? 0);
+  const score = 70 + contrib;
+  if (score >= 100) return { score, label: "Perfect", note: "Maximum achievable protection", barColor: "bg-teal-500", textColor: "text-teal-600" };
+  if (score >= 90) return { score, label: "Excellent", note: "Your archive is extremely secure", barColor: "bg-success", textColor: "text-success-text" };
+  if (score >= 77) return { score, label: "Good", note: "Strong — use a longer password for maximum score", barColor: "bg-accent", textColor: "text-accent" };
+  return { score, label: "Moderate", note: "Use a stronger password for better protection", barColor: "bg-warning", textColor: "text-warning-text" };
 }
 
-function CircleScore({ score, color, ringColor }: { score: number; color: string; ringColor: string }) {
-  const r = 36;
-  const circ = 2 * Math.PI * r;
-  const dash = (score / 100) * circ;
-  return (
-    <svg width="100" height="100" className="-rotate-90">
-      <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="7" className="text-bg-base" />
-      <circle
-        cx="50" cy="50" r={r} fill="none" strokeWidth="7"
-        className={ringColor}
-        strokeLinecap="round"
-        strokeDasharray={`${dash} ${circ}`}
-        style={{ transition: "stroke-dasharray 0.6s ease" }}
-      />
-      <text
-        x="50" y="50" textAnchor="middle" dominantBaseline="middle"
-        className={`rotate-90 fill-current ${color} font-bold text-[18px]`}
-        style={{ fontSize: 18, fontFamily: "inherit" }}
-        transform="rotate(90 50 50)"
-      >
-        {score}
-      </text>
-    </svg>
-  );
-}
+const PW_SCORE_LABELS = ["Very Weak", "Weak", "Fair", "Strong", "Very Strong"];
 
-export default function SecurityReport({
-  result,
-  password,
-  compressionLabel,
-  onClose,
-}: SecurityReportProps) {
+export default function SecurityReport({ result, password, compressionLabel, onClose }: SecurityReportProps) {
   const [copied, setCopied] = useState(false);
-  const [showTechDetails, setShowTechDetails] = useState(false);
+  const [showTech, setShowTech] = useState(false);
+
+  const { score, label, note, barColor, textColor } = computeScore(password?.score ?? null);
+  const isWeakPassword = password !== null && password.score <= 1;
 
   const compressionPct = result.compression_ratio > 0
     ? `${(result.compression_ratio * 100).toFixed(1)}% smaller`
-    : "No reduction";
+    : "no size reduction";
 
-  const { score, label, color, ringColor, note } = computeSecurityScore(
-    password ? password.score : null
-  );
-
-  const handleCopyPath = () => {
+  const handleCopy = () => {
     navigator.clipboard.writeText(result.output_path);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const SCORE_COLORS = ["text-danger-text", "text-warning-text", "text-yellow-300", "text-success-text", "text-teal-300"];
-  const BAR_COLORS = ["bg-danger", "bg-warning", "bg-yellow-500", "bg-success", "bg-teal-500"];
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md mx-4 card-elevated overflow-hidden animate-slide-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-sm mx-4 bg-bg-surface border border-border rounded-xl shadow-lg overflow-hidden animate-slide-up">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-bg-elevated">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-success/15 border border-success/25 flex items-center justify-center">
-              <ShieldCheck size={18} className="text-success" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-text-primary">Archive Created</h2>
-              <p className="text-2xs text-text-muted">Your files are protected</p>
-            </div>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck size={16} className="text-success" />
+            <h2 className="text-sm font-semibold text-text-primary">Archive Created Successfully</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
-          >
-            <X size={16} />
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary p-1 rounded hover:bg-bg-elevated transition-colors">
+            <X size={15} />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
-          {/* Security Score — primary visual */}
-          <div className="flex items-center gap-5 px-5 py-4 rounded-xl bg-bg-base border border-border/60">
-            <CircleScore score={score} color={color} ringColor={ringColor} />
-            <div className="flex-1">
-              <p className="text-xs text-text-muted mb-0.5">Security Score</p>
-              <p className={`text-2xl font-bold ${color} leading-none mb-1`}>{label}</p>
-              <p className="text-2xs text-text-muted leading-relaxed">{note}</p>
-              {password && (
-                <div className="flex gap-1 mt-2">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className={`h-1 flex-1 rounded-full ${i <= password.score ? BAR_COLORS[password.score] ?? "bg-border" : "bg-border"}`} />
-                  ))}
-                  <span className={`text-2xs font-medium ml-1 ${SCORE_COLORS[password.score] ?? "text-text-muted"}`}>
-                    {password.label} password
-                  </span>
-                </div>
-              )}
+        <div className="px-5 py-4 space-y-4">
+          {/* Score */}
+          <div className="flex items-center gap-4 px-4 py-3 rounded-md bg-bg-base border border-border">
+            {/* Circular score */}
+            <div className="relative shrink-0">
+              <svg width="64" height="64" className="-rotate-90">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="5" className="text-bg-elevated" />
+                <circle
+                  cx="32" cy="32" r="26" fill="none" strokeWidth="5"
+                  className={barColor.replace("bg-", "stroke-")}
+                  strokeLinecap="round"
+                  strokeDasharray={`${(score / 100) * 2 * Math.PI * 26} ${2 * Math.PI * 26}`}
+                />
+              </svg>
+              <span className={`absolute inset-0 flex items-center justify-center text-sm font-bold ${textColor}`}>
+                {score}
+              </span>
+            </div>
+            <div>
+              <p className={`text-base font-bold ${textColor} leading-none`}>{label}</p>
+              <p className="text-2xs text-text-muted mt-1 leading-relaxed">{note}</p>
             </div>
           </div>
 
           {/* Archive info */}
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-bg-base border border-border/60">
-            <FileArchive size={16} className="text-accent shrink-0" />
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-bg-base border border-border">
+            <FileArchive size={14} className="text-accent shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-text-primary font-medium truncate">
-                {result.output_path.split(/[\\/]/).pop()}
+              <p className="text-xs font-medium text-text-primary truncate">
+                {result.output_path.replace(/\\/g, "/").split("/").pop()}
               </p>
-              <p className="text-2xs text-text-muted mt-0.5">
+              <p className="text-2xs text-text-muted">
                 {result.file_count} file{result.file_count !== 1 ? "s" : ""} · {formatBytes(result.total_compressed_size)} ({compressionPct})
               </p>
             </div>
-            <button
-              onClick={handleCopyPath}
-              className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors shrink-0"
-              title="Copy path"
-            >
-              {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
+            <button onClick={handleCopy} className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-elevated transition-colors shrink-0" title="Copy path">
+              {copied ? <CheckCircle2 size={13} className="text-success" /> : <Copy size={13} />}
             </button>
           </div>
 
-          {/* What's protected summary */}
-          <div className="space-y-2">
-            <ProtectionRow label="File contents encrypted" />
-            <ProtectionRow label="File names hidden" />
-            <ProtectionRow label="Archive integrity verified" />
+          {/* Protection summary */}
+          <div className="space-y-1.5">
+            <ProtectionRow text="File contents encrypted with a 256-bit key" />
+            <ProtectionRow text="File names and metadata hidden" />
+            <ProtectionRow text="Archive integrity protected against tampering" />
           </div>
 
-          {/* Technical Details — collapsible */}
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          {/* Password section */}
+          {password && (
+            <div className={`px-3 py-2.5 rounded-md border text-2xs ${
+              isWeakPassword
+                ? "bg-warning-muted border-warning/20"
+                : "bg-success-muted border-success/20"
+            }`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className={isWeakPassword ? "text-warning-text font-medium" : "text-success-text font-medium"}>
+                  Password: {PW_SCORE_LABELS[password.score] ?? "Unknown"}
+                </span>
+                {isWeakPassword && <AlertTriangle size={12} className="text-warning" />}
+              </div>
+              <div className="space-y-0.5 text-text-muted">
+                <div className="flex justify-between">
+                  <span>Without ANDRII protection</span>
+                  <span className="font-mono text-danger-text">{password.gpu_crack_time}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>With ANDRII KDF</span>
+                  <span className={`font-mono ${isWeakPassword ? "text-warning-text" : "text-success-text"}`}>
+                    {isWeakPassword ? "Still not recommended" : password.estimated_crack_time}
+                  </span>
+                </div>
+              </div>
+              {isWeakPassword && password.suggestions[0] && (
+                <p className="mt-1.5 text-warning-text leading-relaxed">{password.suggestions[0]}</p>
+              )}
+            </div>
+          )}
+
+          {/* Technical details (collapsed) */}
+          <div className="border border-border rounded-md overflow-hidden">
             <button
-              onClick={() => setShowTechDetails(!showTechDetails)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-bg-base hover:bg-bg-elevated transition-colors text-left"
+              onClick={() => setShowTech(!showTech)}
+              className="w-full flex items-center justify-between px-3.5 py-2 bg-bg-base hover:bg-bg-elevated transition-colors text-left"
             >
-              <span className="text-2xs font-medium text-text-muted uppercase tracking-wider">Technical Details</span>
-              <ChevronDown
-                size={13}
-                className={`text-text-muted transition-transform duration-200 ${showTechDetails ? "rotate-180" : ""}`}
-              />
+              <span className="text-2xs text-text-muted font-medium">Technical details</span>
+              <ChevronDown size={12} className={`text-text-muted transition-transform ${showTech ? "rotate-180" : ""}`} />
             </button>
-            {showTechDetails && (
-              <div className="px-4 py-3 border-t border-border/40 space-y-2 bg-bg-base animate-fade-in">
+            {showTech && (
+              <div className="px-3.5 py-2.5 border-t border-border space-y-1.5 bg-bg-base animate-fade-in">
                 <TechRow label="Encryption" value="XChaCha20-Poly1305" />
-                <TechRow label="Key Derivation" value="Argon2id (64 MiB, 3×, 4 lanes)" />
+                <TechRow label="Key derivation" value="Argon2id (64 MiB, 3 passes, 4 lanes)" />
                 <TechRow label="Integrity" value="BLAKE3 (archive + per-file)" />
-                <TechRow label="Compression" value={compressionLabel} />
+                <TechRow label="Compression" value={`Zstd · ${compressionLabel}`} />
               </div>
             )}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-5">
-          <button onClick={onClose} className="btn-primary w-full justify-center">
-            Done
-          </button>
+        <div className="px-5 pb-5">
+          <button onClick={onClose} className="btn-primary w-full">Done</button>
         </div>
       </div>
     </div>
   );
 }
 
-function ProtectionRow({ label }: { label: string }) {
+function ProtectionRow({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <CheckCircle2 size={13} className="text-success shrink-0" />
-      <span className="text-2xs text-text-secondary">{label}</span>
+    <div className="flex items-start gap-2">
+      <CheckCircle2 size={13} className="text-success shrink-0 mt-0.5" />
+      <span className="text-2xs text-text-secondary">{text}</span>
     </div>
   );
 }
 
 function TechRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-2xs text-text-muted min-w-[110px]">{label}</span>
+    <div className="flex items-baseline gap-2">
+      <span className="text-2xs text-text-muted w-28 shrink-0">{label}</span>
       <span className="text-2xs text-text-secondary font-mono">{value}</span>
     </div>
   );

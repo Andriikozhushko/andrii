@@ -1,4 +1,5 @@
-export type Screen = "home" | "create" | "open" | "verify";
+export type Screen = "create" | "open" | "verify" | "settings";
+export type Theme = "system" | "light" | "dark";
 
 export interface PasswordStrengthResult {
   score: number;

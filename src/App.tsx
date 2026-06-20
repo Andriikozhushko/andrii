@@ -1,14 +1,45 @@
-import { useState } from "react";
-import type { Screen } from "./types";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import type { Screen, Theme } from "./types";
 import Layout from "./components/Layout";
-import Home from "./pages/Home";
 import CreateArchive from "./pages/CreateArchive";
 import OpenArchive from "./pages/OpenArchive";
 import VerifyArchive from "./pages/VerifyArchive";
+import Settings from "./pages/Settings";
+
+function applyTheme(theme: Theme) {
+  if (theme === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+}
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("home");
+  const [screen, setScreen] = useState<Screen>("create");
   const [pendingFiles, setPendingFiles] = useState<string[]>([]);
+  const [startupArchivePath, setStartupArchivePath] = useState<string | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem("andrii-theme") as Theme | null) ?? "system";
+  });
+
+  // Apply theme on mount + changes
+  useEffect(() => {
+    applyTheme(theme);
+    localStorage.setItem("andrii-theme", theme);
+  }, [theme]);
+
+  // Check if app was launched with a .andrii file argument
+  useEffect(() => {
+    invoke<string | null>("get_startup_archive_path").then((path) => {
+      if (path) {
+        setStartupArchivePath(path);
+        setScreen("open");
+      }
+    }).catch(() => {/* ignore */});
+  }, []);
 
   const navigate = (s: Screen) => setScreen(s);
 
@@ -19,19 +50,29 @@ export default function App() {
 
   const handleCreateBack = () => {
     setPendingFiles([]);
-    navigate("home");
+    navigate("create");
   };
 
   return (
     <Layout screen={screen} onNavigate={navigate}>
-      {screen === "home" && (
-        <Home onNavigate={navigate} onNavigateWithFiles={handleDragToCreate} />
-      )}
       {screen === "create" && (
-        <CreateArchive onBack={handleCreateBack} initialFiles={pendingFiles} />
+        <CreateArchive
+          onBack={handleCreateBack}
+          initialFiles={pendingFiles}
+          onNavigateWithFiles={handleDragToCreate}
+        />
       )}
-      {screen === "open" && <OpenArchive onBack={() => navigate("home")} />}
-      {screen === "verify" && <VerifyArchive onBack={() => navigate("home")} />}
+      {screen === "open" && (
+        <OpenArchive
+          onBack={() => navigate("open")}
+          initialPath={startupArchivePath ?? undefined}
+          onClearInitialPath={() => setStartupArchivePath(null)}
+        />
+      )}
+      {screen === "verify" && <VerifyArchive onBack={() => navigate("verify")} />}
+      {screen === "settings" && (
+        <Settings theme={theme} onThemeChange={setTheme} />
+      )}
     </Layout>
   );
 }

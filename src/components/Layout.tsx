@@ -1,13 +1,6 @@
 import type { ReactNode } from "react";
 import type { Screen } from "../types";
-import { ShieldCheck, ChevronLeft, Lock } from "lucide-react";
-
-const SCREEN_TITLES: Record<Screen, string> = {
-  home: "",
-  create: "Create Archive",
-  open: "Open Archive",
-  verify: "Verify Archive",
-};
+import { Archive, FolderOpen, ShieldCheck, Settings, Lock } from "lucide-react";
 
 interface LayoutProps {
   children: ReactNode;
@@ -15,55 +8,84 @@ interface LayoutProps {
   onNavigate: (s: Screen) => void;
 }
 
+interface NavItem {
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  label: string;
+  screen: Screen;
+}
+
+const PRIMARY_NAV: NavItem[] = [
+  { icon: Archive, label: "New Archive", screen: "create" },
+  { icon: FolderOpen, label: "Open Archive", screen: "open" },
+  { icon: ShieldCheck, label: "Verify", screen: "verify" },
+];
+
 export default function Layout({ children, screen, onNavigate }: LayoutProps) {
   return (
-    <div className="flex flex-col h-screen bg-bg-base overflow-hidden">
-      {/* Titlebar */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-border/50 bg-bg-surface/80 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-3">
-          {screen !== "home" && (
-            <button
-              onClick={() => onNavigate("home")}
-              className="p-1.5 rounded-lg hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors"
-              title="Back to Home"
-            >
-              <ChevronLeft size={16} />
-            </button>
-          )}
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
-              <ShieldCheck size={15} className="text-accent" />
+    <div className="flex h-screen bg-bg-base overflow-hidden">
+      {/* Left sidebar */}
+      <aside className="w-[176px] shrink-0 flex flex-col bg-bg-surface border-r border-border">
+        {/* App identity */}
+        <div className="px-4 py-3.5 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-accent/10 flex items-center justify-center shrink-0">
+              <ShieldCheck size={13} className="text-accent" />
             </div>
-            <span className="text-sm font-semibold tracking-widest text-text-primary uppercase">
-              ANDRII
-            </span>
+            <span className="text-sm font-semibold text-text-primary tracking-wide">ANDRII</span>
           </div>
-          {screen !== "home" && SCREEN_TITLES[screen] && (
-            <>
-              <span className="text-border-strong text-xs">›</span>
-              <span className="text-xs text-text-secondary">{SCREEN_TITLES[screen]}</span>
-            </>
-          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="badge badge-accent">v0.1.0</span>
+        {/* Primary navigation */}
+        <nav className="flex-1 px-2 py-2 space-y-0.5">
+          {PRIMARY_NAV.map((item) => (
+            <SidebarItem
+              key={item.screen}
+              icon={item.icon}
+              label={item.label}
+              active={screen === item.screen}
+              onClick={() => onNavigate(item.screen)}
+            />
+          ))}
+        </nav>
+
+        {/* Settings + version */}
+        <div className="border-t border-border px-2 py-2 space-y-0.5">
+          <SidebarItem
+            icon={Settings}
+            label="Settings"
+            active={screen === "settings"}
+            onClick={() => onNavigate("settings")}
+          />
         </div>
-      </header>
+        <div className="px-4 py-2.5 border-t border-border flex items-center gap-1.5">
+          <Lock size={9} className="text-success shrink-0" />
+          <span className="text-2xs text-text-muted">Secure · v0.1.0</span>
+        </div>
+      </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <div className="animate-fade-in h-full">{children}</div>
+      <main className="flex-1 overflow-auto bg-bg-base">
+        <div className="h-full animate-fade-in">{children}</div>
       </main>
-
-      {/* Status bar */}
-      <footer className="flex items-center justify-between px-6 py-1.5 border-t border-border/30 bg-bg-surface/50 shrink-0">
-        <div className="flex items-center gap-2">
-          <Lock size={10} className="text-success" />
-          <span className="text-2xs text-text-muted">End-to-end encrypted</span>
-        </div>
-        <span className="text-2xs text-text-muted">Format v1</span>
-      </footer>
     </div>
+  );
+}
+
+function SidebarItem({
+  icon: Icon, label, active, onClick,
+}: {
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`nav-item ${active ? "nav-item-active" : ""}`}
+    >
+      <Icon size={14} className={active ? "text-accent" : "text-text-muted"} />
+      <span className={active ? "text-accent" : ""}>{label}</span>
+    </button>
   );
 }

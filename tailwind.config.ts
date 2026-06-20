@@ -1,58 +1,56 @@
 import type { Config } from "tailwindcss";
 
+// Colors use CSS variables with space-separated RGB for Tailwind opacity support.
+// Example: bg-accent/10 → rgb(var(--c-accent) / 0.1)
+function v(name: string) {
+  return `rgb(var(${name}) / <alpha-value>)`;
+}
+
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        // ANDRII design system — professional security software palette
         bg: {
-          base: "#0d0f14",
-          surface: "#141720",
-          elevated: "#1a1f2e",
-          hover: "#1f2437",
+          base: v("--c-bg-base"),
+          surface: v("--c-bg-surface"),
+          elevated: v("--c-bg-elevated"),
+          hover: v("--c-bg-hover"),
         },
         border: {
-          DEFAULT: "#252b3b",
-          subtle: "#1d2234",
-          strong: "#2e3650",
+          DEFAULT: v("--c-border"),
+          strong: v("--c-border-strong"),
         },
         text: {
-          primary: "#e2e8f0",
-          secondary: "#8892a4",
-          muted: "#556070",
-          inverse: "#0d0f14",
+          primary: v("--c-text-primary"),
+          secondary: v("--c-text-secondary"),
+          muted: v("--c-text-muted"),
+          inverse: v("--c-text-inverse"),
         },
         accent: {
-          DEFAULT: "#4a90d9",
-          hover: "#5aa3e8",
-          muted: "#1e3a5f",
-          subtle: "#142540",
+          DEFAULT: v("--c-accent"),
+          hover: v("--c-accent-hover"),
+          muted: v("--c-accent-muted"),
+          subtle: v("--c-accent-subtle"),
         },
         success: {
-          DEFAULT: "#3d8c6f",
-          light: "#4aa882",
-          muted: "#1a3d30",
-          text: "#6ecba8",
+          DEFAULT: v("--c-success"),
+          light: v("--c-success-light"),
+          muted: v("--c-success-muted"),
+          text: v("--c-success-text"),
         },
         warning: {
-          DEFAULT: "#c4893d",
-          light: "#d9a050",
-          muted: "#3d2a10",
-          text: "#e8b870",
+          DEFAULT: v("--c-warning"),
+          light: v("--c-warning-light"),
+          muted: v("--c-warning-muted"),
+          text: v("--c-warning-text"),
         },
         danger: {
-          DEFAULT: "#c45454",
-          light: "#d96666",
-          muted: "#3d1a1a",
-          text: "#e88080",
-        },
-        strength: {
-          0: "#c45454", // very weak
-          1: "#c4893d", // weak
-          2: "#c4b43d", // fair
-          3: "#3d8c6f", // strong
-          4: "#3d7a8c", // very strong
+          DEFAULT: v("--c-danger"),
+          light: v("--c-danger-light"),
+          muted: v("--c-danger-muted"),
+          text: v("--c-danger-text"),
         },
       },
       fontFamily: {
@@ -60,16 +58,17 @@ export default {
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       fontSize: {
-        "2xs": ["0.65rem", "1rem"],
+        "2xs": ["0.68rem", "1rem"],
       },
       boxShadow: {
-        card: "0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)",
-        elevated: "0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)",
-        glow: "0 0 20px rgba(74, 144, 217, 0.15)",
+        card: "var(--shadow-card)",
+        elevated: "var(--shadow-elevated)",
+        dialog: "var(--shadow-dialog)",
+        glow: "var(--shadow-glow)",
       },
       animation: {
-        "fade-in": "fadeIn 0.2s ease-out",
-        "slide-up": "slideUp 0.25s ease-out",
+        "fade-in": "fadeIn 0.15s ease-out",
+        "slide-up": "slideUp 0.2s ease-out",
         "pulse-subtle": "pulseSubtle 2s ease-in-out infinite",
       },
       keyframes: {
@@ -78,12 +77,12 @@ export default {
           "100%": { opacity: "1" },
         },
         slideUp: {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         pulseSubtle: {
           "0%, 100%": { opacity: "1" },
-          "50%": { opacity: "0.7" },
+          "50%": { opacity: "0.6" },
         },
       },
     },
