@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Shield, FolderOpen, ShieldCheck, Lock } from "lucide-react";
 
@@ -190,15 +190,15 @@ export default function App() {
     }).catch(() => {});
   }, [setState]);
 
-  // Native Tauri v2 drag-and-drop via getCurrentWebview().onDragDropEvent()
+  // File drag-and-drop via Rust on_window_event → custom events
+  // (bypasses WebView2 JS-level DnD which doesn't forward OS file drops)
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    const unlistens: Array<() => void> = [];
 
     const handlePaths = (paths: string[]) => {
       if (!paths.length) return;
       const cur = canvasRef.current;
 
-      // Single .andrii file → route based on current mode
       if (paths.length === 1 && isAndrii(paths[0])) {
         if (cur.mode === "verify" || cur.mode === "verified") {
           setState({ mode: "verify", archivePath: paths[0] });
@@ -208,7 +208,6 @@ export default function App() {
         return;
       }
 
-      // Non-archive files
       if (cur.mode === "create") {
         const existing = new Set(cur.files);
         const fresh    = paths.filter(p => !existing.has(p));
@@ -218,19 +217,11 @@ export default function App() {
       }
     };
 
-    getCurrentWebview().onDragDropEvent(event => {
-      const p = event.payload;
-      if (p.type === "enter") {
-        setIsDragging(true);
-      } else if (p.type === "drop") {
-        setIsDragging(false);
-        handlePaths(p.paths);
-      } else if (p.type === "leave") {
-        setIsDragging(false);
-      }
-    }).then(fn => { unlisten = fn; });
+    listen<string[]>("dnd-drop",  e => { setIsDragging(false); handlePaths(e.payload); }).then(f => unlistens.push(f));
+    listen<string[]>("dnd-enter", e => { void e; setIsDragging(true); }).then(f => unlistens.push(f));
+    listen<null>    ("dnd-leave", () => { setIsDragging(false); }).then(f => unlistens.push(f));
 
-    return () => unlisten?.();
+    return () => unlistens.forEach(f => f());
   }, [setState]);
 
   /* ── nav handler ── */
