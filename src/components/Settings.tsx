@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useI18n, LANGS } from "../i18n";
 import { setOnboarded } from "../lib/storage";
-import { ArchiveBox } from "./art";
+import Vault from "./Vault";
 import PasswordGenerator from "./PasswordGenerator";
 
 interface AppInfo { version: string; format_version: number; }
@@ -74,7 +74,7 @@ export default function Settings({
             <h3 className="text-[13px] font-semibold text-ink">{t("settings.about")}</h3>
             <div className="rounded-2xl border border-border-strong bg-surface shadow-card p-5">
               <div className="flex items-center gap-3.5">
-                <ArchiveBox variant="sealed" size={58} />
+                <Vault state="sealed" size={58} />
                 <div>
                   <p className="font-serif text-[19px] font-semibold text-ink">ANDRII</p>
                   <p className="text-[12px] text-ink-soft">{t("about.tagline")}</p>

@@ -4,7 +4,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   Eye, EyeOff, Loader2, ArrowDownToLine, ChevronDown, ChevronUp, X,
 } from "lucide-react";
-import { PaperBundle, InkFileGlyph, Keyhole, InkKey } from "../components/art";
+import Vault from "../components/Vault";
+import { InkFileGlyph, Keyhole, InkKey } from "../components/art";
 import { useT, type TFn } from "../i18n";
 import { addRecent } from "../lib/storage";
 import type { OpenArchiveResponse, ArchiveFileEntry } from "../types";
@@ -67,18 +68,16 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
     <div className="canvas">
       <div className="canvas-center px-10">
         {loading ? (
-          /* ── Unlocking state ── */
+          /* ── Unlocking state — the seal turns; no spinner ── */
           <div className="flex flex-col items-center gap-5 animate-fade-in">
-            <div className="animate-pulse"><PaperBundle size={124} /></div>
-            <p className="text-sm text-ink-faint flex items-center gap-2">
-              <Loader2 size={15} className="animate-spin" /> {t("open.unlocking")}
-            </p>
+            <Vault state="unlocking" size={150} />
+            <p className="text-sm text-ink-faint">{t("open.unlocking")}</p>
           </div>
         ) : (
           /* ── Password state ── */
           <div className="w-full max-w-sm space-y-6 animate-fade-in">
             <div className="flex flex-col items-center text-center gap-3">
-              <PaperBundle size={118} />
+              <Vault state="sealed" size={140} />
               <div className="min-w-0">
                 <p className="font-mono text-base font-semibold text-ink truncate max-w-xs">{archiveName}</p>
                 <p className="text-xs text-ink-faint mt-1">{t("open.enterToUnlock")}</p>
@@ -205,7 +204,7 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
       {/* archive details */}
       <div className="px-8 py-3 border-b border-border shrink-0">
         <button className="flex items-center gap-2 w-full" onClick={() => setShowInfo(!showInfo)}>
-          <InkFileGlyph size={18} className="shrink-0" />
+          <span className="shrink-0"><Vault state="opened" size={42} /></span>
           <span className="text-sm font-semibold text-ink flex-1 font-mono text-left truncate">{info.archive_name}</span>
           {showInfo ? <ChevronUp size={13} className="text-ink-faint" /> : <ChevronDown size={13} className="text-ink-faint" />}
         </button>

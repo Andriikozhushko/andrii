@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { WaxSeal, CrackedSeal, SealInspector, InkLens } from "../components/art";
+import Vault from "../components/Vault";
+import { InkLens } from "../components/art";
 import { useT } from "../i18n";
 import type { VerifyResult } from "../types";
 
@@ -54,14 +55,14 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
       <div className="canvas-center px-10 gap-7">
         {verifying ? (
           <div className="flex flex-col items-center gap-5 animate-fade-in">
-            <div className="animate-pulse"><SealInspector size={150} /></div>
+            <Vault state="unlocking" size={150} />
             <p className="text-sm text-ink-faint">{t("verify.checking")}</p>
           </div>
         ) : verdict ? (
           <div className="flex flex-col items-center gap-6 animate-fade-in">
             {verdict.kind === "intact"
-              ? <div className="animate-stamp-in"><WaxSeal size={156} /></div>
-              : <div className={verdict.kind === "broken" ? "animate-shake" : ""}><CrackedSeal size={156} /></div>}
+              ? <Vault state="sealed" tone="safe" size={156} />
+              : <Vault state="broken" size={156} />}
 
             <div className="text-center space-y-2">
               <h2 className={`font-serif text-[30px] font-semibold tracking-tight leading-tight

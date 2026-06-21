@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TitleBar, { type NavTarget } from "./components/TitleBar";
-import { ArchiveBox, PaperBundle, SealInspector, InkAddFiles, InkFolder, InkLens } from "./components/art";
+import Vault from "./components/Vault";
+import { InkAddFiles, InkFolder, InkLens } from "./components/art";
 import SecurityReport from "./components/SecurityReport";
 import Onboarding from "./components/Onboarding";
 import Settings from "./components/Settings";
@@ -70,7 +71,7 @@ function IdleCanvas({
   return (
     <div className="canvas">
       <Hero
-        art={<ArchiveBox variant="open" />}
+        art={<Vault state="idle" size={184} />}
         isDragging={isDragging}
         title={t("create.dropTitle")}
         dragTitle={t("create.dropDrag")}
@@ -104,7 +105,7 @@ function OpenIdleCanvas({
   return (
     <div className="canvas">
       <Hero
-        art={<PaperBundle />}
+        art={<Vault state="sealed" size={184} />}
         isDragging={isDragging}
         title={t("open.title")}
         dragTitle={t("open.dragTitle")}
@@ -122,7 +123,7 @@ function VerifyIdleCanvas({ isDragging, onBrowseArchive }: { isDragging: boolean
   return (
     <div className="canvas">
       <Hero
-        art={<SealInspector />}
+        art={<Vault state="sealed" size={184} />}
         isDragging={isDragging}
         title={t("verify.title")}
         dragTitle={t("verify.dragTitle")}
@@ -141,7 +142,7 @@ function DropOverlay() {
       <div className="absolute inset-0 bg-accent/10" />
       <div className="absolute inset-5 rounded-4xl border-2 border-dashed border-accent bg-accent-soft/40 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 animate-scale-in">
-          <ArchiveBox variant="open" size={150} />
+          <Vault state="filling" size={150} />
           <p className="font-serif text-[24px] font-semibold text-accent-text">{t("create.dropDrag")}</p>
         </div>
       </div>

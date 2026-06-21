@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { ArchiveBox, InkFolder, InkStamp } from "./art";
+import Vault from "./Vault";
+import { InkFolder, InkStamp } from "./art";
 import { useT } from "../i18n";
 import { addRecent } from "../lib/storage";
 import type { CreateArchiveResponse, PasswordStrengthResult, CompressionLevel } from "../types";
@@ -47,7 +48,7 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
   return (
     <div className="canvas animate-fade-in">
       <div className="canvas-center px-10 gap-6">
-        <div className="animate-stamp-in"><ArchiveBox variant="sealed" size={176} /></div>
+        <Vault state="sealed" tone="safe" size={172} />
 
         <div className="text-center space-y-2">
           <h2 className="font-serif text-[34px] font-semibold tracking-tight text-ink leading-none">{t("protected.title")}</h2>
