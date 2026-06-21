@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
 import { Eye, EyeOff, X } from "lucide-react";
@@ -10,7 +9,7 @@ import { Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../componen
 import { useT } from "../i18n";
 import { mapError } from "../lib/errors";
 import type {
-  CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
+  CreateArchiveResponse, PasswordStrengthResult, CompressionLevel,
 } from "../types";
 
 interface CreateArchiveProps {
@@ -56,7 +55,6 @@ export default function CreateArchive({
   const [compression]             = useState<CompressionLevel>("Balanced");
   const [analysis, setAnalysis]   = useState<PasswordStrengthResult | null>(null);
   const [creating, setCreating]   = useState(false);
-  const [progress, setProgress]   = useState<ProgressEvent | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [fileMetas, setFileMetas] = useState<Record<string, FileMeta>>({});
 
@@ -107,7 +105,6 @@ export default function CreateArchive({
 
     setCreating(true);
     setError(null);
-    const unlisten = await listen<ProgressEvent>("archive-progress", e => setProgress(e.payload));
     try {
       const res = await invoke<CreateArchiveResponse>("create_archive", {
         request: { file_paths: files, output_path: outputPath, archive_name: name.trim(), password, compression },
@@ -117,22 +114,12 @@ export default function CreateArchive({
     } catch (e) {
       setError(mapError(String(e), t));
       setCreating(false);
-      setProgress(null);
-    } finally {
-      unlisten();
     }
   };
 
-  /* ── Sealing — the vault closes; no step ladder, the object is the progress ── */
+  /* ── Sealing — the vault simply closes. Silent; the object is the truth. ── */
   if (creating) {
-    return (
-      <VaultScene
-        state="sealed"
-        size={176}
-        title={t("create.sealing")}
-        subtitle={progress?.current_file ? basename(progress.current_file) : undefined}
-      />
-    );
+    return <VaultScene state="sealed" size={176} />;
   }
 
   /* ── Configuration — name the vault, set the key ── */

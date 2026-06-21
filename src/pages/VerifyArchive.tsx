@@ -58,9 +58,8 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
     <div className="canvas">
       <div className="canvas-center px-10 gap-7">
         {verifying ? (
-          <div className="flex flex-col items-center gap-5 animate-fade-in">
+          <div className="flex flex-col items-center animate-fade-in">
             <Vault state="unlocking" size={150} />
-            <p className="text-sm text-ink-faint">{t("verify.checking")}</p>
           </div>
         ) : verdict ? (
           <div className="flex flex-col items-center gap-6 animate-fade-in">

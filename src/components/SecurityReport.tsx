@@ -77,7 +77,6 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
           </div>
         </div>
 
-        <p className="text-[11px] text-ink-faint">{t("protected.footnote")}</p>
       </div>
 
       <div className="bottom-bar">

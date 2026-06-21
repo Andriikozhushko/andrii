@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  Eye, EyeOff, Loader2, ArrowDownToLine, ChevronDown, ChevronUp, X,
+  Eye, EyeOff, ArrowDownToLine, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import Vault from "../components/Vault";
 import { InkFileGlyph, Keyhole, InkKey } from "../components/art";
@@ -63,10 +63,9 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
     <div className="canvas">
       <div className="canvas-center px-10">
         {loading ? (
-          /* ── Unlocking state — the seal turns; no spinner ── */
-          <div className="flex flex-col items-center gap-5 animate-fade-in">
+          /* ── The vault is opening — silent; the object is the truth ── */
+          <div className="flex flex-col items-center animate-fade-in">
             <Vault state="unlocking" size={150} />
-            <p className="text-sm text-ink-faint">{t("open.unlocking")}</p>
           </div>
         ) : (
           /* ── Password state ── */
@@ -233,19 +232,14 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
             </button>
           )}
           <button onClick={() => handleExtract(true)} disabled={extracting} className="btn-primary text-xs py-1.5 px-3 gap-1.5">
-            {extracting ? <><Loader2 size={13} className="animate-spin" /> {t("open.extracting")}</> : <><ArrowDownToLine size={13} /> {t("open.extractAll")}</>}
+            <ArrowDownToLine size={13} /> {t("open.extractAll")}
           </button>
         </div>
       </div>
 
       {/* file table */}
       <div className="flex-1 overflow-y-auto relative">
-        {extracting && (
-          <div className="absolute inset-0 z-10 bg-bg/70 flex flex-col items-center justify-center gap-3 animate-fade-in">
-            <Loader2 size={22} className="animate-spin text-accent" />
-            <span className="text-sm text-ink-soft">{t("open.extracting")}</span>
-          </div>
-        )}
+        {extracting && <div className="absolute inset-0 z-10 bg-bg/55 animate-fade-in" />}
         <div className="px-8 py-1">
           <div className="file-row">
             <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 accent-accent rounded" />
