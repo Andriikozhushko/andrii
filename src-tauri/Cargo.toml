@@ -14,6 +14,9 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Embeds the Windows application manifest (ComCtl32 v6, DPI awareness, long paths)
+# without needing windres/mt.exe — it writes the COFF object itself.
+embed-manifest = "1.4"
 
 [dependencies]
 andrii-core = { workspace = true }
