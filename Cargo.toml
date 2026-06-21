@@ -45,3 +45,9 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Build without a native Windows resource compiler (windres / MinGW / MSVC SDK).
+# The vendored tauri-winres no-ops the .exe resource embed so the project builds
+# with the self-contained rustup toolchain alone. See vendor/tauri-winres.
+[patch.crates-io]
+tauri-winres = { path = "vendor/tauri-winres" }
