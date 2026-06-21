@@ -66,13 +66,15 @@ impl ArchiveReader {
         file.read_exact(&mut encrypted_header_bytes)?;
 
         // Decrypt header (AAD = fixed header bytes)
-        let header_plaintext = decrypt(
-            &master_key,
-            &fixed_header.header_nonce,
-            &encrypted_header_bytes,
-            &fixed_header_bytes,
-        )
-        .map_err(|_| ArchiveError::InvalidPassword)?;
+        let header_plaintext = Zeroizing::new(
+            decrypt(
+                &master_key,
+                &fixed_header.header_nonce,
+                &encrypted_header_bytes,
+                &fixed_header_bytes,
+            )
+            .map_err(|_| ArchiveError::InvalidPassword)?,
+        );
 
         // Parse JSON header
         let encrypted_header = EncryptedHeader::from_json(&header_plaintext)?;
@@ -151,14 +153,17 @@ impl ArchiveReader {
             .map_err(|e| ArchiveError::Format(format!("Invalid nonce for {}: {}", entry.path, e)))?;
         let expected_hash = entry.decode_hash()?;
 
-        // Decrypt: AAD = blake3 hash (binds block to its metadata entry)
-        let compressed = decrypt(&self.master_key, &nonce, &encrypted_block, &expected_hash)
-            .map_err(|_| ArchiveError::Corrupted(format!("Content authentication failed for: {}", entry.path)))?;
+        // Decrypt: AAD = blake3 hash (binds block to its metadata entry).
+        // Decrypted plaintext is zeroized on drop.
+        let compressed = Zeroizing::new(
+            decrypt(&self.master_key, &nonce, &encrypted_block, &expected_hash)
+                .map_err(|_| ArchiveError::Corrupted(format!("Content authentication failed for: {}", entry.path)))?,
+        );
 
         // Decompress
-        let content = decompress(&compressed, Some(entry.original_size as usize))?;
+        let content = Zeroizing::new(decompress(&compressed, Some(entry.original_size as usize))?);
 
-        // Verify BLAKE3 hash
+        // Verify BLAKE3 hash (fail-closed: never write content that doesn't match)
         let actual_hash = hash_bytes(&content);
         if actual_hash != expected_hash {
             return Err(ArchiveError::IntegrityFailed(entry.path.clone()));
@@ -169,7 +174,7 @@ impl ArchiveReader {
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&out_path, &content)?;
+        fs::write(&out_path, content.as_slice())?;
 
         // Restore modification time if possible
         #[cfg(unix)]

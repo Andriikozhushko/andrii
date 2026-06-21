@@ -4,8 +4,6 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use andrii_crypto::hash::hash_bytes;
-
 use crate::error::ArchiveError;
 use crate::format::header::{FixedHeader, Footer, FIXED_HEADER_SIZE, FOOTER_SIZE};
 
@@ -84,33 +82,32 @@ pub fn verify_archive(archive_path: &Path) -> Result<VerifyResult, ArchiveError>
         });
     }
 
-    // Read all bytes before the footer and compute BLAKE3
-    let content_len = file_size - FOOTER_SIZE as u64;
-    file.seek(SeekFrom::Start(0))?;
+    // Stream all bytes before the footer through BLAKE3 (bounded memory), then
+    // compare with the footer hash. Any read/parse error => not valid, never a
+    // crash: a corrupted archive deterministically reports as compromised.
+    let integrity = (|| -> Result<bool, ArchiveError> {
+        let content_len = file_size - FOOTER_SIZE as u64;
+        file.seek(SeekFrom::Start(0))?;
 
-    let mut content_bytes = vec![0u8; content_len as usize];
-    file.read_exact(&mut content_bytes)?;
-    let actual_hash = hash_bytes(&content_bytes);
-
-    // Read footer
-    let mut footer_bytes = [0u8; FOOTER_SIZE];
-    file.read_exact(&mut footer_bytes)?;
-    let footer = match Footer::from_bytes(&footer_bytes) {
-        Ok(f) => f,
-        Err(e) => {
-            return Ok(VerifyResult {
-                is_valid: false,
-                has_valid_magic: true,
-                format_version: fixed_header.version,
-                version_supported: true,
-                integrity_hash_valid: false,
-                file_size,
-                error: Some(format!("Footer is corrupted: {}", e)),
-            });
+        let mut hasher = blake3::Hasher::new();
+        let mut remaining = content_len;
+        let mut buf = [0u8; 1 << 16];
+        while remaining > 0 {
+            let to_read = remaining.min(buf.len() as u64) as usize;
+            file.read_exact(&mut buf[..to_read])?;
+            hasher.update(&buf[..to_read]);
+            remaining -= to_read as u64;
         }
-    };
+        let actual_hash = *hasher.finalize().as_bytes();
 
-    let integrity_hash_valid = actual_hash == footer.archive_hash;
+        let mut footer_bytes = [0u8; FOOTER_SIZE];
+        file.read_exact(&mut footer_bytes)?;
+        let footer = Footer::from_bytes(&footer_bytes)?;
+
+        Ok(actual_hash == footer.archive_hash)
+    })();
+
+    let integrity_hash_valid = integrity.unwrap_or(false);
 
     Ok(VerifyResult {
         is_valid: integrity_hash_valid,

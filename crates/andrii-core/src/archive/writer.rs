@@ -1,5 +1,5 @@
-use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -59,6 +59,10 @@ impl ArchiveWriter {
     pub fn create(&self, input_paths: &[PathBuf]) -> Result<CreateArchiveResult, ArchiveError> {
         // Collect all files to archive
         let files = collect_files(input_paths)?;
+        // Fail-closed: never create an empty vault.
+        if files.is_empty() {
+            return Err(ArchiveError::Format("No files to add to the vault".to_string()));
+        }
         let total_original_size: u64 = files.iter().map(|(_, meta)| meta.0).sum();
 
         // Derive master key
@@ -67,9 +71,30 @@ impl ArchiveWriter {
         let master_key: Zeroizing<[u8; 32]> =
             derive_key(&self.options.password, &salt, &kdf_params)?;
 
-        // Process each file: compress + encrypt, collect entries
+        // Destination dir + a unique stamp for temp files, kept on the same volume
+        // as the output so the final rename is atomic.
+        let output_path = self.options.output_path.clone();
+        let dir = output_path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let stamp = format!(
+            "{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+        );
+        let spool_path = dir.join(format!(".andrii-spool-{stamp}.tmp"));
+        let tmp_path = dir.join(format!(".andrii-build-{stamp}.tmp"));
+
+        // Encrypted blocks are spooled to a temp file so peak memory stays ~one
+        // file, not the whole archive.
+        let mut spool = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&spool_path)?;
         let mut entries: Vec<FileEntry> = Vec::with_capacity(files.len());
-        let mut data_blocks: Vec<Vec<u8>> = Vec::with_capacity(files.len());
         let mut current_data_offset: u64 = 0;
 
         for (idx, (archive_path, (original_size, fs_path, modified_at, unix_mode))) in
@@ -79,15 +104,15 @@ impl ArchiveWriter {
                 cb(idx as u64, files.len() as u64, archive_path);
             }
 
-            // Read file content
-            let content = fs::read(fs_path)?;
+            // Read file content (plaintext zeroized on drop)
+            let content = Zeroizing::new(fs::read(fs_path)?);
 
             // Compute BLAKE3 hash of original content
             let blake3_hash = hash_bytes(&content);
             let blake3_hex = hash_to_hex(&blake3_hash);
 
-            // Compress
-            let compressed = compress(&content, self.options.compression)?;
+            // Compress (plaintext zeroized on drop)
+            let compressed = Zeroizing::new(compress(&content, self.options.compression)?);
 
             // Generate per-file nonce
             let content_nonce = generate_nonce()?;
@@ -110,11 +135,12 @@ impl ArchiveWriter {
             });
 
             current_data_offset += compressed_encrypted_size;
-            data_blocks.push(encrypted);
+            spool.write_all(&encrypted)?;
         }
 
         let total_compressed_size: u64 =
             entries.iter().map(|e| e.compressed_encrypted_size).sum();
+        let file_count = entries.len();
 
         let compression_ratio = if total_original_size > 0 {
             1.0 - (total_compressed_size as f64 / total_original_size as f64)
@@ -164,32 +190,55 @@ impl ArchiveWriter {
         let encrypted_header =
             encrypt(&master_key, &header_nonce, &header_json, &fixed_header_bytes)?;
 
-        // Write the archive file, computing BLAKE3 over all content for the footer
-        let output_file = File::create(&self.options.output_path)?;
-        let mut writer = BufWriter::new(output_file);
-        let mut hasher = blake3::Hasher::new();
+        // Assemble into a temp file in the destination dir, hashing as we go. A
+        // crash mid-write never touches the target — the original (if any) stays
+        // intact until the atomic rename below.
+        let build = (|| -> Result<(), ArchiveError> {
+            let final_file = File::create(&tmp_path)?;
+            let mut writer = BufWriter::new(final_file);
+            let mut hasher = blake3::Hasher::new();
 
-        macro_rules! write_and_hash {
-            ($bytes:expr) => {{
-                writer.write_all($bytes)?;
-                hasher.update($bytes);
-            }};
+            writer.write_all(&fixed_header_bytes)?;
+            hasher.update(&fixed_header_bytes);
+            writer.write_all(&encrypted_header)?;
+            hasher.update(&encrypted_header);
+
+            // Stream the spooled encrypted blocks back in, hashing as we go.
+            spool.seek(SeekFrom::Start(0))?;
+            let mut buf = vec![0u8; 1 << 20];
+            loop {
+                let n = spool.read(&mut buf)?;
+                if n == 0 {
+                    break;
+                }
+                writer.write_all(&buf[..n])?;
+                hasher.update(&buf[..n]);
+            }
+
+            let archive_hash = *hasher.finalize().as_bytes();
+            let footer = Footer::new(archive_hash);
+            writer.write_all(&footer.to_bytes())?;
+            writer.flush()?;
+            Ok(())
+        })();
+
+        // Spool is no longer needed (close before removing on Windows).
+        drop(spool);
+        let _ = fs::remove_file(&spool_path);
+
+        if let Err(e) = build {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
         }
 
-        write_and_hash!(&fixed_header_bytes);
-        write_and_hash!(&encrypted_header);
-        for block in &data_blocks {
-            write_and_hash!(block);
+        // Atomic commit: rename replaces any existing target on Windows & Unix.
+        if let Err(e) = fs::rename(&tmp_path, &output_path) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(ArchiveError::Io(e));
         }
 
-        let archive_hash = *hasher.finalize().as_bytes();
-        let footer = Footer::new(archive_hash);
-        writer.write_all(&footer.to_bytes())?;
-        writer.flush()?;
-
-        let file_count = data_blocks.len();
         Ok(CreateArchiveResult {
-            output_path: self.options.output_path.clone(),
+            output_path,
             file_count,
             total_original_size,
             total_compressed_size,

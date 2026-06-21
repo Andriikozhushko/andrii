@@ -51,7 +51,7 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
     if (result.is_valid) verdict = { kind: "intact", title: t("verify.intact"), body: t("verify.intactSub") };
     else if (isTampered) verdict = { kind: "broken", title: t("verify.broken"), body: t("verify.brokenSub") };
     else if (isUnknown)  verdict = { kind: "unknown", title: t("verify.noSeal"), body: t("verify.noSealSub") };
-    else                 verdict = { kind: "fail", title: t("verify.cantCheck"), body: result.error ?? "" };
+    else                 verdict = { kind: "fail", title: t("verify.cantCheck"), body: "" };
   }
 
   return (
