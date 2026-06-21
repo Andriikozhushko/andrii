@@ -114,6 +114,7 @@ pub struct OpenArchiveResponse {
     pub file_count: usize,
     pub total_original_size: u64,
     pub total_compressed_size: u64,
+    pub format_version: u16,
     pub entries: Vec<ArchiveFileEntry>,
 }
 
@@ -139,6 +140,7 @@ pub async fn open_archive(request: OpenArchiveRequest) -> CommandResult<OpenArch
         file_count: info.file_count,
         total_original_size: info.total_original_size,
         total_compressed_size: info.total_compressed_size,
+        format_version: info.format_version,
         entries: info
             .entries
             .into_iter()

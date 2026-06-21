@@ -230,6 +230,13 @@ fn longest_keyboard_run(s: &str) -> usize {
     best
 }
 
+/// A 4-digit number that looks like a year (1900–2099) — a very predictable suffix.
+fn is_year_suffix(s: &str) -> bool {
+    s.len() == 4
+        && s.chars().all(|c| c.is_ascii_digit())
+        && s.parse::<u32>().map(|y| (1900..=2099).contains(&y)).unwrap_or(false)
+}
+
 fn looks_like_runny_digits(s: &str) -> bool {
     let d: Vec<i32> = s.chars().filter_map(|c| c.to_digit(10)).map(|x| x as i32).collect();
     if d.len() < 2 {
@@ -271,6 +278,8 @@ fn structural_entropy(lower: &str) -> f64 {
             0.0
         } else if looks_like_runny_digits(digit_slice) {
             3.0
+        } else if is_year_suffix(digit_slice) {
+            4.0 // predictable year like 2026 / 1999
         } else {
             (digit_len as f64 * 3.32).min(20.0)
         };
@@ -394,6 +403,20 @@ mod tests {
     #[test]
     fn sequential_digits_weak() {
         assert!(level("123456789").score() <= 1);
+    }
+
+    #[test]
+    fn phase6_examples_never_strong() {
+        for pw in ["test123", "password123", "qwerty123", "asdqwerty123", "admin2026"] {
+            let s = level(pw).score();
+            assert!(s < 3, "{pw} must never be Strong+, scored {:?}", level(pw));
+        }
+    }
+
+    #[test]
+    fn year_suffix_is_predictable() {
+        // word + year is not strong (e.g. Summer2026)
+        assert!(analyze_password("Summer2026").score < 3);
     }
 
     #[test]

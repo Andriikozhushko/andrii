@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useT } from "../i18n";
 import type { CanvasState } from "../types";
+
+export type NavTarget = "create" | "open" | "verify" | "settings";
 
 interface TitleBarProps {
   canvasState: CanvasState;
-  onNavigate: (mode: "create" | "open" | "verify") => void;
+  activeSettings: boolean;
+  onNavigate: (target: NavTarget) => void;
 }
 
 const NAV = [
-  { mode: "create" as const, label: "New Archive" },
-  { mode: "open"   as const, label: "Open Archive" },
-  { mode: "verify" as const, label: "Verify" },
-] as const;
+  { mode: "create" as const, key: "nav.newArchive" },
+  { mode: "open"   as const, key: "nav.openArchive" },
+  { mode: "verify" as const, key: "nav.verify" },
+];
 
 function modeGroup(mode: CanvasState["mode"]): "create" | "open" | "verify" {
   if (mode === "created")  return "create";
@@ -21,7 +25,8 @@ function modeGroup(mode: CanvasState["mode"]): "create" | "open" | "verify" {
   return mode as "create" | "open" | "verify";
 }
 
-export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
+export default function TitleBar({ canvasState, activeSettings, onNavigate }: TitleBarProps) {
+  const t = useT();
   const [maximized, setMaximized] = useState(false);
   const win = getCurrentWindow();
 
@@ -39,11 +44,11 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
     win.startDragging();
   };
 
-  const active = modeGroup(canvasState.mode);
+  const active = activeSettings ? "settings" : modeGroup(canvasState.mode);
 
   return (
     <div className="title-bar" onMouseDown={handleDragRegionMouseDown}>
-      {/* wordmark — hand-drawn logo (black ink on white → multiply onto parchment) */}
+      {/* hand-drawn logo (black ink on white → multiply onto parchment) */}
       <div className="flex items-center pl-4 pr-5 h-full cursor-move">
         <img
           src="/andrii-logo.png"
@@ -55,30 +60,27 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
 
       {/* text nav */}
       <nav className="flex items-center gap-1 h-full">
-        {NAV.map(({ mode, label }) => (
+        {NAV.map(({ mode, key }) => (
           <button
             key={mode}
             onClick={() => onNavigate(mode)}
             className={`relative h-full px-3.5 text-[13px] font-medium transition-colors duration-150
               ${active === mode ? "text-accent-text" : "text-ink-faint hover:text-ink"}`}
           >
-            {label}
-            {active === mode && (
-              <span className="absolute left-3 right-3 bottom-2 h-[2.5px] rounded-full bg-accent" />
-            )}
+            {t(key)}
+            {active === mode && <span className="absolute left-3 right-3 bottom-2 h-[2.5px] rounded-full bg-accent" />}
           </button>
         ))}
       </nav>
 
       <div className="flex-1 cursor-move h-full" />
 
-      {/* settings (placeholder) */}
+      {/* settings */}
       <button
-        className="px-3 text-[12px] text-ink-faint hover:text-ink transition-colors h-full"
-        title="Settings"
-        onClick={() => { /* settings — coming soon */ }}
+        onClick={() => onNavigate("settings")}
+        className={`px-3 text-[12px] transition-colors h-full ${active === "settings" ? "text-accent-text" : "text-ink-faint hover:text-ink"}`}
       >
-        Settings
+        {t("nav.settings")}
       </button>
 
       {/* window controls */}

@@ -2,8 +2,8 @@ mod commands;
 mod error;
 
 use commands::{
-    analyze_password_strength, create_archive, extract_archive, get_startup_archive_path,
-    open_archive, verify_archive_cmd,
+    analyze_password_strength, create_archive, extract_archive, get_app_info,
+    get_startup_archive_path, open_archive, verify_archive_cmd,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,6 +22,7 @@ pub fn run() {
             verify_archive_cmd,
             analyze_password_strength,
             get_startup_archive_path,
+            get_app_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running ANDRII application");

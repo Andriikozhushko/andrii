@@ -27,6 +27,7 @@ pub struct ArchiveInfo {
     pub file_count: usize,
     pub total_original_size: u64,
     pub total_compressed_size: u64,
+    pub format_version: u16,
     pub entries: Vec<FileEntrySummary>,
 }
 
@@ -102,6 +103,7 @@ impl ArchiveReader {
             file_count: entries.len(),
             total_original_size,
             total_compressed_size,
+            format_version: self.fixed_header.version,
             entries: entries.iter().map(FileEntrySummary::from).collect(),
         }
     }

@@ -36,6 +36,7 @@ export interface OpenArchiveResponse {
   file_count: number;
   total_original_size: number;
   total_compressed_size: number;
+  format_version: number;
   entries: ArchiveFileEntry[];
 }
 
@@ -69,4 +70,5 @@ export type CanvasState =
   | { mode: "open"; archivePath: string }
   | { mode: "unlocked"; archivePath: string; password: string; info: OpenArchiveResponse }
   | { mode: "verify"; archivePath?: string }
-  | { mode: "verified"; result: VerifyResult; archivePath: string };
+  | { mode: "verified"; result: VerifyResult; archivePath: string }
+  | { mode: "settings" };
