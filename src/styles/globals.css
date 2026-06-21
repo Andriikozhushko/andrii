@@ -20,10 +20,10 @@
   --c-ink-faint:      139 129 112;   /* #8B8170             */
   --c-inverse:        251 247 238;   /* off-white on accent */
 
-  /* accent — muted ANDRII violet/indigo */
-  --c-accent:          91  83 198;   /* #5B53C6 */
-  --c-accent-deep:     72  64 158;   /* #48409E */
-  --c-accent-soft:    231 227 247;   /* #E7E3F7 */
+  /* accent — petrol / old-ink blue (fits parchment + wax, not tech violet) */
+  --c-accent:          46  94 115;   /* #2E5E73 */
+  --c-accent-deep:     33  70  87;   /* #214657 */
+  --c-accent-soft:    220 231 235;   /* #DCE7EB */
 
   /* wax red (danger / tampered) + green (safe, rare) + amber */
   --c-wax:            178  58  53;   /* #B23A35 */
@@ -59,8 +59,8 @@
     /* parchment with faint two-tone warmth + a hint of paper grain */
     background-color: rgb(var(--c-bg));
     background-image:
-      radial-gradient(1100px 520px at 18% -8%, rgba(91,83,198,0.05), transparent 60%),
-      radial-gradient(900px 480px at 100% 0%, rgba(178,58,53,0.035), transparent 58%),
+      radial-gradient(1100px 520px at 18% -8%, rgba(46,94,115,0.06), transparent 60%),
+      radial-gradient(900px 480px at 100% 0%, rgba(178,58,53,0.04), transparent 58%),
       radial-gradient(rgba(42,38,34,0.022) 1px, transparent 1px);
     background-size: auto, auto, 4px 4px;
   }
@@ -178,7 +178,7 @@
   }
   .drop-zone-active {
     @apply border-accent bg-accent-soft/60 scale-[1.006];
-    box-shadow: 0 0 0 4px rgba(91,83,198,0.12), var(--shadow-lg);
+    box-shadow: 0 0 0 4px rgba(46,94,115,0.14), var(--shadow-lg);
   }
 
   /* ── Ink file card (paper slip) ───────────────────────────────────────── */

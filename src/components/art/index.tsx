@@ -11,7 +11,7 @@ const PARCH = "#F3ECDD";
 const PAPER = "#FBF7EE";
 const WAX = "#B23A35";
 const WAX_DEEP = "#8E2B27";
-const ACCENT = "#5B53C6";
+const ACCENT = "#2E5E73";
 const SAFE = "#3E7D5A";
 
 type ArtProps = { size?: number; className?: string };
@@ -198,5 +198,68 @@ export function InkFileGlyph({
     </svg>
   );
 }
+
+/* ── Small ink glyphs (inherit currentColor) — for buttons & labels ───────── */
+type GlyphProps = { size?: number; className?: string };
+const g = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+function Glyph({ size = 16, className = "", children }: GlyphProps & { children: React.ReactNode }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={className} {...g}>
+      {children}
+    </svg>
+  );
+}
+
+export const InkAddFiles = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <path d="M7 3 h7 l4 4 v11 a1 1 0 0 1 -1 1 H7 a1 1 0 0 1 -1 -1 V4 a1 1 0 0 1 1 -1 Z" />
+    <path d="M14 3 v4 h4" />
+    <path d="M11 11 v6 M8 14 h6" />
+  </Glyph>
+);
+
+export const InkFolder = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <path d="M3 8 q0 -2 2 -2 h4 l2 2 h8 q2 0 2 2 v7 q0 2 -2 2 H5 q-2 0 -2 -2 Z" />
+  </Glyph>
+);
+
+export const InkKey = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <circle cx="8" cy="8" r="4.2" />
+    <path d="M11 11 l8.5 8.5" />
+    <path d="M17 17 l2.2 -2.2 M19 19 l2.2 -2.2" />
+  </Glyph>
+);
+
+export const InkStamp = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <rect x="9.5" y="3" width="5" height="3.5" rx="1.2" />
+    <path d="M8 12 q4 -3.5 8 0 l1.5 1.5 H6.5 Z" />
+    <line x1="12" y1="6.5" x2="12" y2="9" />
+    <path d="M5 18 q7 -2.5 14 0" />
+  </Glyph>
+);
+
+export const InkLens = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <circle cx="10" cy="10" r="6" />
+    <line x1="14.5" y1="14.5" x2="20" y2="20" />
+  </Glyph>
+);
+
+export const InkQuill = (p: GlyphProps) => (
+  <Glyph {...p}>
+    <path d="M20 4 C12 5 7.5 9.5 5 18" />
+    <path d="M20 4 c-1.5 7 -6 10.5 -12 11.5" />
+    <path d="M5 18 l3.5 -3.5" />
+  </Glyph>
+);
 
 export const ART_COLORS = { INK, PARCH, PAPER, WAX, WAX_DEEP, ACCENT, SAFE };

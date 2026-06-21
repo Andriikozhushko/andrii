@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { ArchiveBox } from "./art";
+import { ArchiveBox, InkFolder, InkStamp } from "./art";
 import type { CreateArchiveResponse, PasswordStrengthResult, CompressionLevel } from "../types";
 
 interface SecurityReportProps {
@@ -63,8 +63,8 @@ export default function SecurityReport({
             </div>
           </div>
           <div className="flex border-t border-border divide-x divide-border">
-            <button onClick={showInFolder} className="flex-1 py-2.5 text-[12px] text-ink-soft hover:bg-hover transition-colors">
-              Show in folder
+            <button onClick={showInFolder} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] text-ink-soft hover:bg-hover transition-colors">
+              <InkFolder size={14} /> Show in folder
             </button>
             <button onClick={copyPath} className="flex-1 py-2.5 text-[12px] text-ink-soft hover:bg-hover transition-colors">
               {copied ? "Copied" : "Copy path"}
@@ -78,7 +78,7 @@ export default function SecurityReport({
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onCreateAnother} className="btn-ghost text-sm">Seal another</button>
+        <button onClick={onCreateAnother} className="btn-ghost text-sm"><InkStamp size={15} /> Seal another</button>
         <button onClick={onDone} className="btn-primary">Done</button>
       </div>
     </div>

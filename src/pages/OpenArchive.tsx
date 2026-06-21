@@ -4,7 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   Eye, EyeOff, Loader2, ArrowDownToLine, ChevronDown, ChevronUp, X,
 } from "lucide-react";
-import { PaperBundle, InkFileGlyph, Keyhole } from "../components/art";
+import { PaperBundle, InkFileGlyph, Keyhole, InkKey } from "../components/art";
 import type { OpenArchiveResponse, ArchiveFileEntry } from "../types";
 
 interface OpenArchiveProps {
@@ -107,7 +107,7 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
           >
             {loading
               ? <><Loader2 size={15} className="animate-spin" /> Unlocking…</>
-              : "Open box"}
+              : <><InkKey size={16} /> Open box</>}
           </button>
         </div>
       </div>

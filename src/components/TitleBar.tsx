@@ -43,12 +43,14 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
 
   return (
     <div className="title-bar" onMouseDown={handleDragRegionMouseDown}>
-      {/* wordmark */}
-      <div className="flex items-center gap-2.5 pl-5 pr-6 h-full cursor-move">
-        <WaxDot />
-        <span className="font-serif text-[17px] font-semibold tracking-[0.04em] text-ink pointer-events-none">
-          ANDRII
-        </span>
+      {/* wordmark — hand-drawn logo (black ink on white → multiply onto parchment) */}
+      <div className="flex items-center pl-4 pr-5 h-full cursor-move">
+        <img
+          src="/andrii-logo.png"
+          alt="ANDRII"
+          draggable={false}
+          className="h-9 w-auto mix-blend-multiply pointer-events-none select-none"
+        />
       </div>
 
       {/* text nav */}
@@ -102,16 +104,6 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
         </WinBtn>
       </div>
     </div>
-  );
-}
-
-/* a little hand-drawn wax dot mark */
-function WaxDot() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" className="pointer-events-none shrink-0">
-      <circle cx="8" cy="8" r="6.5" fill="#B23A35" stroke="#8E2B27" strokeWidth="1.5" />
-      <path d="M3 7 a5 5 0 0 1 8 -1" stroke="#ffffff" strokeOpacity="0.3" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-    </svg>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { WaxSeal, CrackedSeal, SealInspector } from "../components/art";
+import { WaxSeal, CrackedSeal, SealInspector, InkLens } from "../components/art";
 import type { VerifyResult } from "../types";
 
 interface VerifyArchiveProps {
@@ -74,7 +74,7 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
             </div>
 
             {archivePath && (
-              <button onClick={() => runVerify(archivePath)} className="btn-secondary text-sm">Check again</button>
+              <button onClick={() => runVerify(archivePath)} className="btn-secondary text-sm"><InkLens size={15} /> Check again</button>
             )}
           </div>
 

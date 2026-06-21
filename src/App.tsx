@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import TitleBar from "./components/TitleBar";
-import { ArchiveBox, PaperBundle, SealInspector } from "./components/art";
+import { ArchiveBox, PaperBundle, SealInspector, InkAddFiles, InkFolder, InkLens } from "./components/art";
 import SecurityReport from "./components/SecurityReport";
 import CreateArchive from "./pages/CreateArchive";
 import OpenArchive, { UnlockedArchive } from "./pages/OpenArchive";
@@ -75,8 +75,8 @@ function IdleCanvas({
       subtitle={<>Create a private <span className="font-mono text-ink">.andrii</span> archive only your password can open.</>}
     >
       <div className="flex items-center gap-3">
-        <button onClick={onBrowseFiles} className="btn-primary">Add files</button>
-        <button onClick={onBrowseFolder} className="btn-secondary">Add folder</button>
+        <button onClick={onBrowseFiles} className="btn-primary"><InkAddFiles /> Add files</button>
+        <button onClick={onBrowseFolder} className="btn-secondary"><InkFolder /> Add folder</button>
       </div>
       <button
         onClick={onBrowseArchive}
@@ -103,7 +103,7 @@ function OpenIdleCanvas({
       dragTitle="Release to open"
       subtitle={<>Drop a <span className="font-mono text-ink">.andrii</span> archive here, or choose one to unlock.</>}
     >
-      <button onClick={onBrowseArchive} className="btn-primary">Choose archive</button>
+      <button onClick={onBrowseArchive} className="btn-primary"><InkLens /> Choose archive</button>
     </Hero>
   );
 }
@@ -123,7 +123,7 @@ function VerifyIdleCanvas({
       dragTitle="Release to check"
       subtitle="Verify that the archive was not modified after creation."
     >
-      <button onClick={onBrowseArchive} className="btn-primary">Choose archive</button>
+      <button onClick={onBrowseArchive} className="btn-primary"><InkLens /> Choose archive</button>
     </Hero>
   );
 }

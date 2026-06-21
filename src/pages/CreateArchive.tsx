@@ -5,7 +5,7 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
 import { Eye, EyeOff, X } from "lucide-react";
 import PasswordStrength from "../components/PasswordStrength";
-import { ArchiveBox, InkFileGlyph, Keyhole } from "../components/art";
+import { ArchiveBox, InkFileGlyph, Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../components/art";
 import type {
   CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
 } from "../types";
@@ -194,8 +194,8 @@ export default function CreateArchive({
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={addFiles} className="btn-ghost text-xs">Add files</button>
-            <button onClick={addFolder} className="btn-ghost text-xs">Add folder</button>
+            <button onClick={addFiles} className="btn-ghost text-xs"><InkAddFiles size={14} /> Add files</button>
+            <button onClick={addFolder} className="btn-ghost text-xs"><InkFolder size={14} /> Add folder</button>
           </div>
         </div>
 
@@ -209,7 +209,9 @@ export default function CreateArchive({
         {/* name + password */}
         <div className="pt-1 space-y-5">
           <div>
-            <label className="block text-[12px] font-semibold text-ink-soft mb-1">Archive name</label>
+            <label className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-soft mb-1">
+              <InkQuill size={14} /> Archive name
+            </label>
             <input
               ref={nameRef}
               type="text"
@@ -257,7 +259,7 @@ export default function CreateArchive({
 
       <div className="bottom-bar">
         <button onClick={onClear} className="btn-ghost text-sm">Clear</button>
-        <button onClick={handleCreate} disabled={!canCreate} className="btn-primary">Seal archive</button>
+        <button onClick={handleCreate} disabled={!canCreate} className="btn-primary"><InkStamp /> Seal archive</button>
       </div>
     </div>
   );
