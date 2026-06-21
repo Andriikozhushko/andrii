@@ -13,7 +13,7 @@ import CreateArchive from "./pages/CreateArchive";
 import OpenArchive, { UnlockedArchive } from "./pages/OpenArchive";
 import VerifyArchive from "./pages/VerifyArchive";
 import { useT } from "./i18n";
-import { isOnboarded, getRecents, removeRecent, type RecentArchive } from "./lib/storage";
+import { isOnboarded, getVaults, removeVault, type VaultRegistryEntry } from "./lib/storage";
 
 import type {
   CanvasState, CreateArchiveResponse, PasswordStrengthResult,
@@ -97,8 +97,8 @@ function OpenIdleCanvas({
 }: {
   isDragging: boolean;
   onBrowseArchive: () => void;
-  recents: RecentArchive[];
-  onOpenRecent: (r: RecentArchive) => void;
+  recents: VaultRegistryEntry[];
+  onOpenRecent: (r: VaultRegistryEntry) => void;
   onRemoveRecent: (path: string) => void;
 }) {
   const t = useT();
@@ -155,7 +155,7 @@ export default function App() {
   const [canvas, setCanvas]         = useState<CanvasState>({ mode: "idle" });
   const [isDragging, setIsDragging] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboarded());
-  const [recents, setRecents]       = useState<RecentArchive[]>(() => getRecents());
+  const [recents, setRecents]       = useState<VaultRegistryEntry[]>(() => getVaults());
   const canvasRef                   = useRef<CanvasState>({ mode: "idle" });
 
   const setState = useCallback((next: CanvasState | ((prev: CanvasState) => CanvasState)) => {
@@ -168,7 +168,7 @@ export default function App() {
 
   // Recents live in Open mode — refresh when entering Create home or Open.
   useEffect(() => {
-    if (canvas.mode === "idle" || canvas.mode === "open") setRecents(getRecents());
+    if (canvas.mode === "idle" || canvas.mode === "open") setRecents(getVaults());
   }, [canvas.mode]);
 
   // Startup file-association path
@@ -210,8 +210,8 @@ export default function App() {
     if (target === "settings") setState({ mode: "settings" });
   }, [setState]);
 
-  const openRecent = (r: RecentArchive) => setState({ mode: "open", archivePath: r.path });
-  const dropRecent = (path: string) => { removeRecent(path); setRecents(getRecents()); };
+  const openRecent = (r: VaultRegistryEntry) => setState({ mode: "open", archivePath: r.path });
+  const dropRecent = (path: string) => { removeVault(path); setRecents(getVaults()); };
 
   const browseFiles = async () => {
     const picked = await open({ multiple: true, directory: false });

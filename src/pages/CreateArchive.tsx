@@ -8,6 +8,7 @@ import PasswordStrength from "../components/PasswordStrength";
 import Vault, { VaultScene } from "../components/Vault";
 import { Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../components/art";
 import { useT } from "../i18n";
+import { mapError } from "../lib/errors";
 import type {
   CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
 } from "../types";
@@ -114,7 +115,7 @@ export default function CreateArchive({
       await sleep(600);
       onCreated(res, analysis, compression);
     } catch (e) {
-      setError(String(e));
+      setError(mapError(String(e), t));
       setCreating(false);
       setProgress(null);
     } finally {

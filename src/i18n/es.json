@@ -42,7 +42,8 @@
     "stepCollecting": "Recopilando archivos",
     "stepEncrypting": "Cifrando contenido",
     "stepSealing": "Sellando el archivo",
-    "stepFinalizing": "Finalizando"
+    "stepFinalizing": "Finalizando",
+    "errWrite": "No se pudo guardar el archivo ahí — comprueba la carpeta e inténtalo de nuevo."
   },
   "open": {
     "title": "Abrir archivo",
@@ -67,7 +68,8 @@
     "errNotArchive": "Archivo ANDRII no válido.",
     "errCorrupted": "El archivo puede estar dañado.",
     "errNotFound": "Archivo no encontrado.",
-    "errFailed": "No se pudo abrir el archivo."
+    "errFailed": "No se pudo abrir el archivo.",
+    "errVersion": "Este archivo necesita una versión más reciente de ANDRII."
   },
   "details": {
     "title": "Detalles del archivo",

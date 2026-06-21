@@ -42,7 +42,8 @@
     "stepCollecting": "Збираємо файли",
     "stepEncrypting": "Шифруємо вміст",
     "stepSealing": "Запечатуємо архів",
-    "stepFinalizing": "Завершуємо"
+    "stepFinalizing": "Завершуємо",
+    "errWrite": "Не вдалося зберегти архів там — перевірте теку та повторіть."
   },
   "open": {
     "title": "Відкрити архів",
@@ -67,7 +68,8 @@
     "errNotArchive": "Недійсний архів ANDRII.",
     "errCorrupted": "Архів може бути пошкоджений.",
     "errNotFound": "Файл не знайдено.",
-    "errFailed": "Не вдалося відкрити архів."
+    "errFailed": "Не вдалося відкрити архів.",
+    "errVersion": "Цей архів потребує новішої версії ANDRII."
   },
   "details": {
     "title": "Деталі архіву",

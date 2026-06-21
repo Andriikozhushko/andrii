@@ -6,8 +6,9 @@ import {
 } from "lucide-react";
 import Vault from "../components/Vault";
 import { InkFileGlyph, Keyhole, InkKey } from "../components/art";
-import { useT, type TFn } from "../i18n";
-import { addRecent } from "../lib/storage";
+import { useT } from "../i18n";
+import { recordOpened } from "../lib/storage";
+import { mapError } from "../lib/errors";
 import type { OpenArchiveResponse, ArchiveFileEntry } from "../types";
 
 interface OpenArchiveProps {
@@ -28,15 +29,6 @@ function formatDate(ts: number): string {
 function basename(p: string) { return p.replace(/\\/g, "/").split("/").pop() ?? p; }
 function looksDir(e: ArchiveFileEntry) { return e.original_size === 0 && !basename(e.path).includes("."); }
 
-function humanizeError(raw: string, t: TFn): string {
-  const s = raw.toLowerCase();
-  if (s.includes("invalid password") || s.includes("invalidpassword")) return t("open.errIncorrect");
-  if (s.includes("magic") || s.includes("invalidmagic")) return t("open.errNotArchive");
-  if (s.includes("tamper") || s.includes("corrupt")) return t("open.errCorrupted");
-  if (s.includes("no such file") || s.includes("os error 2")) return t("open.errNotFound");
-  return t("open.errFailed");
-}
-
 export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArchiveProps) {
   const t = useT();
   const [password, setPassword] = useState("");
@@ -55,10 +47,13 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
       const info = await invoke<OpenArchiveResponse>("open_archive", {
         request: { archive_path: archivePath, password },
       });
-      addRecent({ name: archiveName, path: archivePath, date: Date.now(), size: info.total_compressed_size });
+      recordOpened(archivePath, {
+        name: info.archive_name, fileCount: info.file_count,
+        sealedSize: info.total_compressed_size, formatVersion: info.format_version,
+      });
       onUnlocked(password, info);
     } catch (e) {
-      setError(humanizeError(String(e), t));
+      setError(mapError(String(e), t));
     } finally {
       setLoading(false);
     }

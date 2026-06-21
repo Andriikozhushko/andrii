@@ -42,7 +42,8 @@
     "stepCollecting": "Collecting files",
     "stepEncrypting": "Encrypting content",
     "stepSealing": "Sealing archive",
-    "stepFinalizing": "Finalizing"
+    "stepFinalizing": "Finalizing",
+    "errWrite": "Couldn't save the vault there — check the folder and try again."
   },
   "open": {
     "title": "Open an archive",
@@ -67,7 +68,8 @@
     "errNotArchive": "Not a valid ANDRII archive.",
     "errCorrupted": "Archive may be corrupted.",
     "errNotFound": "File not found.",
-    "errFailed": "Failed to open archive."
+    "errFailed": "Failed to open archive.",
+    "errVersion": "This vault needs a newer ANDRII."
   },
   "details": {
     "title": "Archive details",

@@ -42,7 +42,8 @@
     "stepCollecting": "Dateien sammeln",
     "stepEncrypting": "Inhalt verschlüsseln",
     "stepSealing": "Archiv versiegeln",
-    "stepFinalizing": "Abschließen"
+    "stepFinalizing": "Abschließen",
+    "errWrite": "Das Archiv konnte dort nicht gespeichert werden — prüfen Sie den Ordner und versuchen Sie es erneut."
   },
   "open": {
     "title": "Archiv öffnen",
@@ -67,7 +68,8 @@
     "errNotArchive": "Kein gültiges ANDRII-Archiv.",
     "errCorrupted": "Archiv ist möglicherweise beschädigt.",
     "errNotFound": "Datei nicht gefunden.",
-    "errFailed": "Archiv konnte nicht geöffnet werden."
+    "errFailed": "Archiv konnte nicht geöffnet werden.",
+    "errVersion": "Dieses Archiv benötigt ein neueres ANDRII."
   },
   "details": {
     "title": "Archivdetails",

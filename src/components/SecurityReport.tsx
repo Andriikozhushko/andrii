@@ -3,7 +3,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import Vault from "./Vault";
 import { InkFolder, InkStamp } from "./art";
 import { useT } from "../i18n";
-import { addRecent } from "../lib/storage";
+import { recordCreated } from "../lib/storage";
 import type { CreateArchiveResponse, PasswordStrengthResult, CompressionLevel } from "../types";
 
 interface SecurityReportProps {
@@ -33,9 +33,12 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
     ? Math.round((1 - result.total_compressed_size / result.total_original_size) * 100)
     : 0;
 
-  // Record into recent archives once.
+  // Remember this vault once.
   useEffect(() => {
-    addRecent({ name: archiveName, path: result.output_path, date: Date.now(), size: result.total_compressed_size });
+    recordCreated({
+      path: result.output_path, name: archiveName,
+      fileCount: result.file_count, sealedSize: result.total_compressed_size,
+    });
   }, [result.output_path]);
 
   const copyPath = () => {

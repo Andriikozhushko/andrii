@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import Vault from "../components/Vault";
 import { InkLens } from "../components/art";
 import { useT } from "../i18n";
+import { recordVerified } from "../lib/storage";
+import { mapError } from "../lib/errors";
 import type { VerifyResult } from "../types";
 
 interface VerifyArchiveProps {
@@ -29,8 +31,10 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
     try {
       const r = await invoke<VerifyResult>("verify_archive_cmd", { request: { archive_path: path } });
       setResult(r);
+      // Only record a definite integrity verdict for real ANDRII archives.
+      if (r.has_valid_magic) recordVerified(path, r.is_valid);
     } catch (e) {
-      setError(String(e));
+      setError(mapError(String(e), t));
     } finally {
       setVerifying(false);
     }
