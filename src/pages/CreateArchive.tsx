@@ -3,9 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
-import { Eye, EyeOff, X, Wand2 } from "lucide-react";
+import { Eye, EyeOff, X } from "lucide-react";
 import PasswordStrength from "../components/PasswordStrength";
-import PasswordGenerator from "../components/PasswordGenerator";
 import { ArchiveBox, InkFileGlyph, Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../components/art";
 import { useT } from "../i18n";
 import type {
@@ -101,7 +100,6 @@ export default function CreateArchive({
   const [name, setName]           = useState("");
   const [password, setPassword]   = useState("");
   const [showPw, setShowPw]       = useState(false);
-  const [showGen, setShowGen]     = useState(false);
   const [compression]             = useState<CompressionLevel>("Balanced");
   const [analysis, setAnalysis]   = useState<PasswordStrengthResult | null>(null);
   const [creating, setCreating]   = useState(false);
@@ -212,12 +210,7 @@ export default function CreateArchive({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[12px] font-semibold text-ink-soft">{t("create.password")}</label>
-              <button onClick={() => setShowGen(v => !v)} className="flex items-center gap-1 text-[12px] text-accent-text hover:underline">
-                <Wand2 size={13} /> {t("common.generate")}
-              </button>
-            </div>
+            <label className="block text-[12px] font-semibold text-ink-soft mb-1">{t("create.password")}</label>
             <div className="relative">
               <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
               <input
@@ -232,12 +225,6 @@ export default function CreateArchive({
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-
-            {showGen && (
-              <div className="mt-3">
-                <PasswordGenerator onUse={pw => { setPassword(pw); setShowPw(true); setShowGen(false); }} />
-              </div>
-            )}
 
             <div className="mt-2.5">
               {password

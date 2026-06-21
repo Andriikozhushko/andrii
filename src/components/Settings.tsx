@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useI18n, LANGS } from "../i18n";
 import { setOnboarded } from "../lib/storage";
 import { ArchiveBox } from "./art";
+import PasswordGenerator from "./PasswordGenerator";
 
 interface AppInfo { version: string; format_version: number; }
 
@@ -53,6 +54,12 @@ export default function Settings({
                 </button>
               ))}
             </div>
+          </section>
+
+          {/* Password generator */}
+          <section className="space-y-3">
+            <h3 className="text-[13px] font-semibold text-ink">{t("generator.title")}</h3>
+            <PasswordGenerator />
           </section>
 
           {/* Replay onboarding */}

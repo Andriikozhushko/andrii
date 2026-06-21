@@ -58,19 +58,20 @@ export default function TitleBar({ canvasState, activeSettings, onNavigate }: Ti
         />
       </div>
 
-      {/* text nav */}
-      <nav className="flex items-center gap-1 h-full">
-        {NAV.map(({ mode, key }) => (
-          <button
-            key={mode}
-            onClick={() => onNavigate(mode)}
-            className={`relative h-full px-3.5 text-[13px] font-medium transition-colors duration-150
-              ${active === mode ? "text-accent-text" : "text-ink-faint hover:text-ink"}`}
-          >
-            {t(key)}
-            {active === mode && <span className="absolute left-3 right-3 bottom-2 h-[2.5px] rounded-full bg-accent" />}
-          </button>
-        ))}
+      {/* segmented mode control — the user is always in exactly one mode */}
+      <nav className="flex items-center pl-1">
+        <div className="flex items-center gap-0.5 p-0.5 rounded-xl bg-surface-sunken border border-border">
+          {NAV.map(({ mode, key }) => (
+            <button
+              key={mode}
+              onClick={() => onNavigate(mode)}
+              className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors duration-150
+                ${active === mode ? "bg-surface text-ink shadow-card" : "text-ink-faint hover:text-ink"}`}
+            >
+              {t(key)}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div className="flex-1 cursor-move h-full" />

@@ -56,17 +56,15 @@ function Hero({
   );
 }
 
-/* ── Idle Canvas — create flow (with recents) ───────────────────────────── */
+/* ── Create mode — home (Create only; Open/Verify are secondary links) ──── */
 function IdleCanvas({
-  isDragging, onBrowseFiles, onBrowseFolder, onBrowseArchive, recents, onOpenRecent, onRemoveRecent,
+  isDragging, onBrowseFiles, onBrowseFolder, onGoOpen, onGoVerify,
 }: {
   isDragging: boolean;
   onBrowseFiles: () => void;
   onBrowseFolder: () => void;
-  onBrowseArchive: () => void;
-  recents: RecentArchive[];
-  onOpenRecent: (r: RecentArchive) => void;
-  onRemoveRecent: (path: string) => void;
+  onGoOpen: () => void;
+  onGoVerify: () => void;
 }) {
   const t = useT();
   return (
@@ -82,17 +80,26 @@ function IdleCanvas({
           <button onClick={onBrowseFiles} className="btn-primary"><InkAddFiles /> {t("create.addFiles")}</button>
           <button onClick={onBrowseFolder} className="btn-secondary"><InkFolder /> {t("create.addFolder")}</button>
         </div>
-        <button onClick={onBrowseArchive} className="text-[13px] text-ink-faint hover:text-accent-text transition-colors">
-          {t("create.orOpenExisting")}
-        </button>
+        <div className="flex items-center gap-2.5 text-[13px] text-ink-faint">
+          <button onClick={onGoOpen} className="hover:text-accent-text transition-colors">{t("nav.openArchive")}</button>
+          <span className="text-border-strong">·</span>
+          <button onClick={onGoVerify} className="hover:text-accent-text transition-colors">{t("nav.verify")}</button>
+        </div>
       </Hero>
-      {!isDragging && <RecentArchives items={recents} onOpen={onOpenRecent} onRemove={onRemoveRecent} />}
     </div>
   );
 }
 
-/* ── Open / Verify idle ─────────────────────────────────────────────────── */
-function OpenIdleCanvas({ isDragging, onBrowseArchive }: { isDragging: boolean; onBrowseArchive: () => void }) {
+/* ── Open mode — entry (choose + recents) ───────────────────────────────── */
+function OpenIdleCanvas({
+  isDragging, onBrowseArchive, recents, onOpenRecent, onRemoveRecent,
+}: {
+  isDragging: boolean;
+  onBrowseArchive: () => void;
+  recents: RecentArchive[];
+  onOpenRecent: (r: RecentArchive) => void;
+  onRemoveRecent: (path: string) => void;
+}) {
   const t = useT();
   return (
     <div className="canvas">
@@ -105,6 +112,7 @@ function OpenIdleCanvas({ isDragging, onBrowseArchive }: { isDragging: boolean; 
       >
         <button onClick={onBrowseArchive} className="btn-primary"><InkLens /> {t("open.choose")}</button>
       </Hero>
+      {!isDragging && <RecentArchives items={recents} onOpen={onOpenRecent} onRemove={onRemoveRecent} />}
     </div>
   );
 }
@@ -157,8 +165,10 @@ export default function App() {
     });
   }, []);
 
-  // Refresh recents whenever we land back on the start screen.
-  useEffect(() => { if (canvas.mode === "idle") setRecents(getRecents()); }, [canvas.mode]);
+  // Recents live in Open mode — refresh when entering Create home or Open.
+  useEffect(() => {
+    if (canvas.mode === "idle" || canvas.mode === "open") setRecents(getRecents());
+  }, [canvas.mode]);
 
   // Startup file-association path
   useEffect(() => {
@@ -245,10 +255,8 @@ export default function App() {
             isDragging={isDragging}
             onBrowseFiles={browseFiles}
             onBrowseFolder={browseFolder}
-            onBrowseArchive={browseArchive}
-            recents={recents}
-            onOpenRecent={openRecent}
-            onRemoveRecent={dropRecent}
+            onGoOpen={() => handleNavigate("open")}
+            onGoVerify={() => handleNavigate("verify")}
           />
         )}
 
@@ -283,7 +291,13 @@ export default function App() {
         )}
 
         {canvas.mode === "open" && !canvas.archivePath && (
-          <OpenIdleCanvas isDragging={isDragging} onBrowseArchive={browseArchive} />
+          <OpenIdleCanvas
+            isDragging={isDragging}
+            onBrowseArchive={browseArchive}
+            recents={recents}
+            onOpenRecent={openRecent}
+            onRemoveRecent={dropRecent}
+          />
         )}
 
         {canvas.mode === "unlocked" && (

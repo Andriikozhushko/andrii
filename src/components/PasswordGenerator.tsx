@@ -36,7 +36,7 @@ function genRandom(len: number): string {
   return out;
 }
 
-export default function PasswordGenerator({ onUse }: { onUse: (pw: string) => void }) {
+export default function PasswordGenerator({ onUse }: { onUse?: (pw: string) => void }) {
   const t = useT();
   const [mode, setMode] = useState<"memorable" | "random">("memorable");
   const [len, setLen] = useState(20);
@@ -95,9 +95,11 @@ export default function PasswordGenerator({ onUse }: { onUse: (pw: string) => vo
         </div>
       )}
 
-      <button onClick={() => onUse(pw)} className="btn-primary w-full justify-center">
-        {t("generator.useThis")}
-      </button>
+      {onUse && (
+        <button onClick={() => onUse(pw)} className="btn-primary w-full justify-center">
+          {t("generator.useThis")}
+        </button>
+      )}
     </div>
   );
 }
