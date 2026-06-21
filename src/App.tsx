@@ -2,9 +2,8 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Shield, FolderOpen, ShieldCheck, Lock } from "lucide-react";
-
 import TitleBar from "./components/TitleBar";
+import { ArchiveBox, PaperBundle, SealInspector } from "./components/art";
 import SecurityReport from "./components/SecurityReport";
 import CreateArchive from "./pages/CreateArchive";
 import OpenArchive, { UnlockedArchive } from "./pages/OpenArchive";
@@ -17,6 +16,47 @@ import type {
 
 function isAndrii(path: string) { return path.toLowerCase().endsWith(".andrii"); }
 
+/* ── Shared hero (idle / drop target) ───────────────────────────────────── */
+function Hero({
+  art, title, dragTitle, subtitle, isDragging, children,
+}: {
+  art: React.ReactNode;
+  title: string;
+  dragTitle: string;
+  subtitle?: React.ReactNode;
+  isDragging: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="canvas">
+      <div className="flex-1 p-7">
+        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
+          <div className="flex flex-col items-center text-center max-w-md mx-auto gap-6 px-6">
+            <div className={`transition-transform duration-300 ease-out ${isDragging ? "scale-110 -translate-y-1" : ""}`}>
+              {art}
+            </div>
+
+            <div className="space-y-2.5">
+              <h2 className="font-serif text-[34px] font-semibold tracking-tight text-ink leading-[1.05]">
+                {isDragging ? dragTitle : title}
+              </h2>
+              {!isDragging && subtitle && (
+                <p className="text-[15px] text-ink-soft leading-relaxed max-w-sm mx-auto">
+                  {subtitle}
+                </p>
+              )}
+            </div>
+
+            {!isDragging && children && (
+              <div className="flex flex-col items-center gap-4 pt-1">{children}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Idle Canvas — create flow ──────────────────────────────────────────── */
 function IdleCanvas({
   isDragging, onBrowseFiles, onBrowseFolder, onBrowseArchive,
@@ -27,50 +67,24 @@ function IdleCanvas({
   onBrowseArchive: () => void;
 }) {
   return (
-    <div className="canvas">
-      <div className="flex-1 p-6">
-        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
-          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
-              ${isDragging ? "bg-accent text-white" : "bg-accent/10 text-accent"}`}>
-              <Shield size={32} strokeWidth={1.5} />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
-                {isDragging ? "Drop to protect" : "Drop files or folders here"}
-              </h2>
-              {!isDragging && (
-                <p className="text-sm text-text-muted leading-relaxed">
-                  Files become encrypted <span className="font-mono">.andrii</span> archives.<br />
-                  Only you can open them.
-                </p>
-              )}
-            </div>
-
-            {!isDragging && (
-              <>
-                <div className="flex items-center gap-3">
-                  <button onClick={onBrowseFiles} className="btn-secondary text-sm px-5 py-2.5">
-                    Add Files
-                  </button>
-                  <button onClick={onBrowseFolder} className="btn-secondary text-sm px-5 py-2.5">
-                    Add Folder
-                  </button>
-                </div>
-
-                <button
-                  onClick={onBrowseArchive}
-                  className="text-[12px] text-text-muted hover:text-text-secondary underline underline-offset-2 transition-colors"
-                >
-                  or open an existing .andrii archive
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+    <Hero
+      art={<ArchiveBox variant="open" />}
+      isDragging={isDragging}
+      title="Drop files to seal"
+      dragTitle="Release to seal"
+      subtitle={<>Create a private <span className="font-mono text-ink">.andrii</span> archive only your password can open.</>}
+    >
+      <div className="flex items-center gap-3">
+        <button onClick={onBrowseFiles} className="btn-primary">Add files</button>
+        <button onClick={onBrowseFolder} className="btn-secondary">Add folder</button>
       </div>
-    </div>
+      <button
+        onClick={onBrowseArchive}
+        className="text-[13px] text-ink-faint hover:text-accent-text transition-colors"
+      >
+        or open an existing archive
+      </button>
+    </Hero>
   );
 }
 
@@ -82,35 +96,15 @@ function OpenIdleCanvas({
   onBrowseArchive: () => void;
 }) {
   return (
-    <div className="canvas">
-      <div className="flex-1 p-6">
-        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
-          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
-              ${isDragging ? "bg-accent text-white" : "bg-elevated text-text-secondary"}`}>
-              <FolderOpen size={32} strokeWidth={1.5} />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
-                {isDragging ? "Drop to open" : "Open an archive"}
-              </h2>
-              {!isDragging && (
-                <p className="text-sm text-text-muted">
-                  Drop a <span className="font-mono">.andrii</span> archive or browse.
-                </p>
-              )}
-            </div>
-
-            {!isDragging && (
-              <button onClick={onBrowseArchive} className="btn-secondary text-sm px-5 py-2.5">
-                Browse archive
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <Hero
+      art={<PaperBundle />}
+      isDragging={isDragging}
+      title="Open an archive"
+      dragTitle="Release to open"
+      subtitle={<>Drop a <span className="font-mono text-ink">.andrii</span> archive here, or choose one to unlock.</>}
+    >
+      <button onClick={onBrowseArchive} className="btn-primary">Choose archive</button>
+    </Hero>
   );
 }
 
@@ -122,47 +116,27 @@ function VerifyIdleCanvas({
   onBrowseArchive: () => void;
 }) {
   return (
-    <div className="canvas">
-      <div className="flex-1 p-6">
-        <div className={`drop-zone h-full ${isDragging ? "drop-zone-active" : ""}`}>
-          <div className="flex flex-col items-center text-center max-w-sm mx-auto gap-5">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors duration-200
-              ${isDragging ? "bg-accent text-white" : "bg-elevated text-text-secondary"}`}>
-              <ShieldCheck size={32} strokeWidth={1.5} />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-text-primary tracking-tight">
-                {isDragging ? "Drop to verify" : "Verify an archive"}
-              </h2>
-              {!isDragging && (
-                <p className="text-sm text-text-muted leading-relaxed">
-                  No password needed.<br />
-                  Checks that the archive has not been tampered with.
-                </p>
-              )}
-            </div>
-
-            {!isDragging && (
-              <button onClick={onBrowseArchive} className="btn-secondary text-sm px-5 py-2.5">
-                Browse archive
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <Hero
+      art={<SealInspector />}
+      isDragging={isDragging}
+      title="Check an archive seal"
+      dragTitle="Release to check"
+      subtitle="Verify that the archive was not modified after creation."
+    >
+      <button onClick={onBrowseArchive} className="btn-primary">Choose archive</button>
+    </Hero>
   );
 }
 
 /* ── Drop overlay ───────────────────────────────────────────────────────── */
 function DropOverlay() {
   return (
-    <div className="fixed inset-0 z-50 bg-accent/8 pointer-events-none animate-fade-in">
-      <div className="absolute inset-4 border-2 border-dashed border-accent/50 rounded-2xl flex items-center justify-center">
-        <div className="text-center">
-          <Lock size={36} className="text-accent/70 mx-auto mb-3" />
-          <p className="text-base font-semibold text-accent">Drop to protect</p>
+    <div className="fixed inset-0 z-50 pointer-events-none animate-fade-in">
+      <div className="absolute inset-0 bg-accent/10" />
+      <div className="absolute inset-5 rounded-4xl border-2 border-dashed border-accent bg-accent-soft/40 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 animate-scale-in">
+          <ArchiveBox variant="open" size={150} />
+          <p className="font-serif text-[24px] font-semibold text-accent-text">Drop to seal</p>
         </div>
       </div>
     </div>
@@ -217,9 +191,10 @@ export default function App() {
       }
     };
 
-    listen<string[]>("dnd-drop",  e => { setIsDragging(false); handlePaths(e.payload); }).then(f => unlistens.push(f));
-    listen<string[]>("dnd-enter", e => { void e; setIsDragging(true); }).then(f => unlistens.push(f));
-    listen<null>    ("dnd-leave", () => { setIsDragging(false); }).then(f => unlistens.push(f));
+    // Native Tauri/WRY drag-drop — payloads carry absolute paths cross-platform.
+    listen<{ paths: string[] }>("tauri://drag-drop",  e => { setIsDragging(false); handlePaths(e.payload.paths); }).then(f => unlistens.push(f));
+    listen<{ paths: string[] }>("tauri://drag-enter", e => { void e; setIsDragging(true); }).then(f => unlistens.push(f));
+    listen                     ("tauri://drag-leave", () => { setIsDragging(false); }).then(f => unlistens.push(f));
 
     return () => unlistens.forEach(f => f());
   }, [setState]);
@@ -271,7 +246,7 @@ export default function App() {
     : canvas.mode;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-bg">
+    <div className="flex flex-col h-screen overflow-hidden">
       <TitleBar canvasState={canvas} onNavigate={handleNavigate} />
 
       {isDragging && <DropOverlay />}

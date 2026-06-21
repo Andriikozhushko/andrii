@@ -7,17 +7,17 @@ pub enum StrengthLevel {
     Weak,
     Fair,
     Strong,
-    VeryStrong,
+    Excellent,
 }
 
 impl StrengthLevel {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::VeryWeak => "Very Weak",
+            Self::VeryWeak => "Very weak",
             Self::Weak => "Weak",
             Self::Fair => "Fair",
             Self::Strong => "Strong",
-            Self::VeryStrong => "Very Strong",
+            Self::Excellent => "Excellent",
         }
     }
 
@@ -27,7 +27,7 @@ impl StrengthLevel {
             Self::Weak => 1,
             Self::Fair => 2,
             Self::Strong => 3,
-            Self::VeryStrong => 4,
+            Self::Excellent => 4,
         }
     }
 }
@@ -39,10 +39,10 @@ pub struct PasswordAnalysis {
     pub label: String,
     pub score: u8,
     pub entropy_bits: f64,
-    /// Crack time with Argon2id protection (~2 guesses/sec per GPU).
+    /// Conservative, human-readable time bucket derived from the strength level.
+    /// Never reports absurd estimates ("millions of years").
     pub estimated_crack_time: String,
-    /// Crack time without KDF protection (GPU at ~10^10 hashes/sec).
-    /// Shows the intrinsic password strength, not ANDRII's protection.
+    /// Kept for API compatibility; same conservative bucket as `estimated_crack_time`.
     pub gpu_crack_time: String,
     pub has_lowercase: bool,
     pub has_uppercase: bool,
@@ -52,226 +52,290 @@ pub struct PasswordAnalysis {
     pub suggestions: Vec<String>,
 }
 
+/// Known weak passwords (also matched as a base word before a digit/symbol suffix).
 const COMMON_PASSWORDS: &[&str] = &[
-    "password", "123456", "12345678", "qwerty", "abc123", "password1",
-    "111111", "123123", "admin", "letmein", "welcome", "monkey", "dragon",
-    "master", "login", "pass", "test", "iloveyou", "sunshine", "princess",
-    "football", "shadow", "superman", "michael", "jessica", "qwerty123",
-    "password123", "1234567", "12345", "1234567890", "000000", "654321",
-    "123456789", "passw0rd", "aaaaaa", "mustang", "access", "hello",
-    "charlie", "donald", "batman", "trustno1", "12341234", "1q2w3e",
-    "pass123", "test123", "admin123", "root", "toor", "secret",
+    "password", "passwort", "passw0rd", "123456", "12345678", "1234567",
+    "12345", "1234567890", "123456789", "qwerty", "qwertyuiop", "qwerty123",
+    "abc123", "password1", "111111", "000000", "123123", "112233", "121212",
+    "admin", "administrator", "letmein", "welcome", "monkey", "dragon",
+    "master", "login", "pass", "test", "testing", "iloveyou", "sunshine",
+    "princess", "football", "baseball", "shadow", "superman", "michael",
+    "jessica", "ashley", "qazwsx", "zxcvbn", "zxcvbnm", "asdf", "asdfgh",
+    "asdfghjkl", "asdasd", "654321", "passw0rd", "mustang", "access",
+    "hello", "hello123", "charlie", "donald", "batman", "trustno1",
+    "12341234", "1q2w3e", "1q2w3e4r", "1qaz2wsx", "pass123", "test123",
+    "admin123", "root", "toor", "secret", "changeme", "default", "guest",
+    "user", "abcdef", "abcd1234", "qwe123", "asd123",
+];
+
+/// Keyboard adjacency rows (and reverses) used to detect swipe patterns.
+const KEYBOARD_ROWS: &[&str] = &[
+    "qwertyuiop", "poiuytrewq",
+    "asdfghjkl", "lkjhgfdsa",
+    "zxcvbnm", "mnbvcxz",
+    "1234567890", "0987654321",
+    "qwertz", "azerty",
 ];
 
 /// Analyze password strength and return detailed metrics.
 pub fn analyze_password(password: &str) -> PasswordAnalysis {
     let length = password.len();
+    let lower = password.to_lowercase();
+
     let has_lowercase = password.chars().any(|c| c.is_ascii_lowercase());
     let has_uppercase = password.chars().any(|c| c.is_ascii_uppercase());
     let has_digits = password.chars().any(|c| c.is_ascii_digit());
     let has_symbols = password.chars().any(|c| !c.is_alphanumeric());
 
-    let is_common = COMMON_PASSWORDS.contains(&password.to_lowercase().as_str());
+    let common = is_common(&lower);
 
-    // Calculate character pool size
-    let mut pool_size: u32 = 0;
-    if has_lowercase { pool_size += 26; }
-    if has_uppercase { pool_size += 26; }
-    if has_digits { pool_size += 10; }
-    if has_symbols { pool_size += 32; }
-    if pool_size == 0 { pool_size = 1; }
-
-    // Pool-based entropy
+    // Full-credit upper bound: brute-force pool entropy.
     let pool_entropy = if length == 0 {
         0.0
     } else {
-        (pool_size as f64).log2() * length as f64
+        (pool_size(password) as f64).log2() * length as f64
     };
 
-    // Apply penalties
-    let effective_entropy = if is_common {
-        0.0
-    } else {
-        let repetition_penalty = calculate_repetition_penalty(password);
-        let sequence_penalty = calculate_sequence_penalty(password);
-        let pattern_entropy = detect_pattern_entropy(password);
+    // Take the MINIMUM over several pattern-aware estimates. Random passwords
+    // match no pattern and keep their full pool entropy; structured / mashed
+    // passwords are capped down to something realistic.
+    let mut effective = pool_entropy;
 
-        // Use the minimum of pool-based entropy and pattern-based entropy
-        let base = pool_entropy.min(pattern_entropy);
-        (base - repetition_penalty - sequence_penalty).max(0.0)
-    };
+    // Repeated chunks: "asdasd", "abcabcabc" -> entropy of one unit + log2(reps).
+    if length > 1 {
+        let p = smallest_period(password.as_bytes());
+        if p < length {
+            let reps = length / p;
+            let unit = &password[..p];
+            let unit_entropy = (pool_size(unit) as f64).log2() * p as f64;
+            effective = effective.min(unit_entropy + (reps as f64).log2());
+        }
+    }
 
-    let level = entropy_to_level(effective_entropy, is_common);
-    let estimated_crack_time = entropy_to_argon2id_time(effective_entropy);
-    let gpu_crack_time = entropy_to_gpu_time(effective_entropy);
+    // Keyboard swipe runs ("qwerty", "asdf", "1234"): the run collapses to a few
+    // bits, the rest keeps modest per-char entropy.
+    let kb = longest_keyboard_run(&lower);
+    if kb >= 4 {
+        let rest = length.saturating_sub(kb) as f64;
+        effective = effective.min(10.0 + rest * 2.0);
+    }
 
-    let mut suggestions = Vec::new();
-    if length < 12 {
-        suggestions.push("Use at least 12 characters".to_string());
+    // Structural: single word + digits(+symbols), or all-digits.
+    effective = effective.min(structural_entropy(&lower));
+
+    // Known-common (exact or base word) → effectively no security.
+    if common {
+        effective = 0.0;
     }
-    if !has_uppercase {
-        suggestions.push("Add uppercase letters".to_string());
-    }
-    if !has_digits {
-        suggestions.push("Add numbers".to_string());
-    }
-    if !has_symbols {
-        suggestions.push("Add symbols (!, @, #, ...)".to_string());
-    }
-    if is_common {
-        suggestions.push("This is a commonly used password — choose something unique".to_string());
-    }
-    if length >= 16 && has_lowercase && has_uppercase && has_digits && has_symbols && !is_common && suggestions.is_empty() {
-        suggestions.push("Excellent password strength".to_string());
-    }
+
+    // Local sequence / repetition penalties.
+    let penalty = repetition_penalty(password) + sequence_penalty(password);
+    effective = (effective - penalty).max(0.0);
+
+    let level = entropy_to_level(effective, common);
+    let bucket = level_to_time(&level, effective);
 
     PasswordAnalysis {
         label: level.label().to_string(),
         score: level.score(),
+        estimated_crack_time: bucket.to_string(),
+        gpu_crack_time: bucket.to_string(),
         level,
-        entropy_bits: effective_entropy,
-        estimated_crack_time,
-        gpu_crack_time,
+        entropy_bits: effective,
         has_lowercase,
         has_uppercase,
         has_digits,
         has_symbols,
         length,
-        suggestions,
+        suggestions: build_suggestions(length, has_uppercase, has_digits, has_symbols, common),
     }
 }
 
-/// Detect if the password follows a human-chosen pattern (word+digits, etc.)
-/// and return a realistic "dictionary attack" entropy estimate in bits.
-/// Returns f64::MAX if no pattern detected (fall back to pool entropy).
-fn detect_pattern_entropy(password: &str) -> f64 {
-    let bytes = password.as_bytes();
+fn build_suggestions(
+    length: usize,
+    has_upper: bool,
+    has_digits: bool,
+    has_symbols: bool,
+    common: bool,
+) -> Vec<String> {
+    let recommendation =
+        "Use 12+ characters with unrelated words, numbers and symbols, or use a password manager."
+            .to_string();
+    let strong_enough = length >= 12 && has_upper && has_digits && has_symbols && !common;
+    if strong_enough {
+        return Vec::new();
+    }
+    vec![recommendation]
+}
+
+/// Exact match, or a known base word followed only by digits/symbols
+/// ("password123" → "password", "admin123" → "admin").
+fn is_common(lower: &str) -> bool {
+    if lower.is_empty() {
+        return false;
+    }
+    if COMMON_PASSWORDS.contains(&lower) {
+        return true;
+    }
+    let base: String = lower
+        .trim_end_matches(|c: char| c.is_ascii_digit() || !c.is_ascii_alphanumeric())
+        .to_string();
+    base.len() >= 4 && base != lower && COMMON_PASSWORDS.contains(&base.as_str())
+}
+
+fn pool_size(s: &str) -> u32 {
+    let mut p: u32 = 0;
+    if s.chars().any(|c| c.is_ascii_lowercase()) {
+        p += 26;
+    }
+    if s.chars().any(|c| c.is_ascii_uppercase()) {
+        p += 26;
+    }
+    if s.chars().any(|c| c.is_ascii_digit()) {
+        p += 10;
+    }
+    if s.chars().any(|c| !c.is_alphanumeric()) {
+        p += 32;
+    }
+    p.max(1)
+}
+
+/// Smallest repeating period of a byte slice; equals `len` if not periodic.
+fn smallest_period(s: &[u8]) -> usize {
+    let n = s.len();
+    for p in 1..=n / 2 {
+        if n % p == 0 && (p..n).all(|i| s[i] == s[i - p]) {
+            return p;
+        }
+    }
+    n
+}
+
+/// Longest contiguous substring (len ≥ 3) that appears in a keyboard row.
+fn longest_keyboard_run(s: &str) -> usize {
+    let chars: Vec<char> = s.chars().collect();
+    let n = chars.len();
+    let mut best = 0usize;
+    for i in 0..n {
+        let mut j = n;
+        while j > i + 2 {
+            let sub: String = chars[i..j].iter().collect();
+            if KEYBOARD_ROWS.iter().any(|r| r.contains(&sub)) {
+                best = best.max(j - i);
+                break;
+            }
+            j -= 1;
+        }
+    }
+    best
+}
+
+fn looks_like_runny_digits(s: &str) -> bool {
+    let d: Vec<i32> = s.chars().filter_map(|c| c.to_digit(10)).map(|x| x as i32).collect();
+    if d.len() < 2 {
+        return false;
+    }
+    let all_same = d.windows(2).all(|w| w[0] == w[1]);
+    let asc = d.windows(2).all(|w| w[1] - w[0] == 1);
+    let desc = d.windows(2).all(|w| w[1] - w[0] == -1);
+    all_same || asc || desc
+}
+
+/// Realistic entropy for human-structured passwords. Returns `f64::MAX` when no
+/// structure is recognised (caller falls back to pool entropy).
+fn structural_entropy(lower: &str) -> f64 {
+    let bytes = lower.as_bytes();
     let len = bytes.len();
     if len == 0 {
         return 0.0;
     }
 
-    // Find split point between alpha prefix and digit/symbol suffix
+    // [alpha run][digit run][symbol run]
     let alpha_len = bytes.iter().take_while(|b| b.is_ascii_alphabetic()).count();
-    let digits_len = bytes[alpha_len..].iter().take_while(|b| b.is_ascii_digit()).count();
-    let symbols_len = bytes[alpha_len + digits_len..].iter().take_while(|b| !b.is_ascii_alphanumeric()).count();
+    let digit_len = bytes[alpha_len..].iter().take_while(|b| b.is_ascii_digit()).count();
+    let symbol_len = bytes[alpha_len + digit_len..]
+        .iter()
+        .take_while(|b| !b.is_ascii_alphanumeric())
+        .count();
 
-    // Pattern: pure alpha word + digits (optionally trailing symbols)
-    if alpha_len >= 3 && alpha_len <= 8 && (digits_len + symbols_len) > 0
-        && alpha_len + digits_len + symbols_len == len
-    {
-        // Dictionary attack: ~10,000 common words, digit suffix = 10^digit_count
-        let word_space = 10_000.0_f64;
-        let digit_space = 10_f64.powi(digits_len as i32).max(1.0);
-        let symbol_space = 32_f64.powi(symbols_len as i32).max(1.0);
-        return (word_space * digit_space * symbol_space).log2();
+    if alpha_len >= 3 && (digit_len + symbol_len) > 0 && alpha_len + digit_len + symbol_len == len {
+        let alpha = &lower[..alpha_len];
+        let kb = longest_keyboard_run(alpha);
+        let alpha_bits = if kb >= alpha_len.saturating_sub(1) {
+            8.0 // basically a keyboard mash
+        } else {
+            (8.0 + alpha_len as f64 * 0.9).min(30.0) // unknown word, grows slowly
+        };
+        let digit_slice = &lower[alpha_len..alpha_len + digit_len];
+        let digit_bits = if digit_len == 0 {
+            0.0
+        } else if looks_like_runny_digits(digit_slice) {
+            3.0
+        } else {
+            (digit_len as f64 * 3.32).min(20.0)
+        };
+        let symbol_bits = (symbol_len as f64 * 4.0).min(16.0);
+        return alpha_bits + digit_bits + symbol_bits;
     }
 
-    // Pattern: pure alpha word + alpha word (two concatenated words)
-    let first_word = bytes.iter().take_while(|b| b.is_ascii_lowercase()).count();
-    let second_word = bytes[first_word..].iter().take_while(|b| b.is_ascii_lowercase()).count();
-    if first_word >= 3 && second_word >= 3 && first_word + second_word == len {
-        // Two lowercase words: word_space^2
-        let word_space = 10_000.0_f64;
-        return (word_space * word_space).log2(); // ~26.5 bits
-    }
-
-    // Pattern: all digits
+    // all digits
     if bytes.iter().all(|b| b.is_ascii_digit()) {
-        return (10_f64.powi(len as i32)).log2();
+        if looks_like_runny_digits(lower) {
+            return 8.0;
+        }
+        return (len as f64 * 3.32).min(30.0);
     }
 
-    // Pattern: repeated character (aaaaaa, 111111)
-    if bytes.windows(2).all(|w| w[0] == w[1]) {
-        return 6.0; // log2(94 * length) would be too generous; treat as near-zero
-    }
-
-    f64::MAX // no pattern detected, use pool entropy
+    f64::MAX
 }
 
-fn entropy_to_level(entropy: f64, is_common: bool) -> StrengthLevel {
-    if is_common || entropy < 28.0 {
+fn entropy_to_level(entropy: f64, common: bool) -> StrengthLevel {
+    if common || entropy < 16.0 {
         StrengthLevel::VeryWeak
-    } else if entropy < 36.0 {
+    } else if entropy < 32.0 {
         StrengthLevel::Weak
-    } else if entropy < 50.0 {
+    } else if entropy < 48.0 {
         StrengthLevel::Fair
-    } else if entropy < 70.0 {
+    } else if entropy < 66.0 {
         StrengthLevel::Strong
     } else {
-        StrengthLevel::VeryStrong
+        StrengthLevel::Excellent
     }
 }
 
-/// Crack time with Argon2id protection (~2 guesses/sec, GPU memory-limited).
-fn entropy_to_argon2id_time(entropy: f64) -> String {
-    if entropy <= 0.0 {
-        return "Instantly".to_string();
-    }
-    // Expected guesses = 2^(entropy-1), at 2/sec: seconds = 2^(entropy-2)
-    let log2_seconds = entropy - 2.0;
-    format_time_from_log2_seconds(log2_seconds)
-}
-
-/// Crack time without KDF protection (GPU brute-force, ~10^10 hashes/sec).
-/// This shows the intrinsic password strength as a raw secret.
-fn entropy_to_gpu_time(entropy: f64) -> String {
-    if entropy <= 0.0 {
-        return "Instantly".to_string();
-    }
-    // 10^10 guesses/sec ≈ 2^33.2
-    // seconds = 2^(entropy-1) / 10^10 = 2^(entropy - 1 - 33.2) = 2^(entropy - 34.2)
-    let log2_seconds = entropy - 34.2;
-    if log2_seconds < 0.0 {
-        return "< 1 second".to_string();
-    }
-    format_time_from_log2_seconds(log2_seconds)
-}
-
-fn format_time_from_log2_seconds(log2_seconds: f64) -> String {
-    if log2_seconds < 0.0 {
-        "Less than a second".to_string()
-    } else if log2_seconds < 5.0 {
-        "A few seconds".to_string()
-    } else if log2_seconds < 11.0 {
-        format!("{} minutes", (2f64.powf(log2_seconds) / 60.0).ceil() as u64)
-    } else if log2_seconds < 16.6 {
-        format!("{} hours", (2f64.powf(log2_seconds) / 3600.0).ceil() as u64)
-    } else if log2_seconds < 21.0 {
-        let days = (2f64.powf(log2_seconds) / 86400.0).ceil() as u64;
-        format!("{} days", days)
-    } else if log2_seconds < 31.5 {
-        let years = (2f64.powf(log2_seconds) / (86400.0 * 365.25)).ceil() as u64;
-        if years < 1000 {
-            format!("{} years", years)
-        } else {
-            format!("{:.0}K years", years as f64 / 1000.0)
+/// Conservative time bucket per the 01F spec. Never absurd.
+fn level_to_time(level: &StrengthLevel, entropy: f64) -> &'static str {
+    match level {
+        StrengthLevel::VeryWeak => {
+            if entropy < 8.0 {
+                "Instantly"
+            } else {
+                "A few seconds"
+            }
         }
-    } else if log2_seconds < 51.6 {
-        "Millions of years".to_string()
-    } else {
-        "Billions of years".to_string()
+        StrengthLevel::Weak => "Minutes to hours",
+        StrengthLevel::Fair => "Days to weeks",
+        StrengthLevel::Strong => "Months to years",
+        StrengthLevel::Excellent => "Many years",
     }
 }
 
-fn calculate_repetition_penalty(password: &str) -> f64 {
+fn repetition_penalty(password: &str) -> f64 {
     let chars: Vec<char> = password.chars().collect();
     let mut penalty = 0.0;
-    for window in chars.windows(3) {
-        if window[0] == window[1] && window[1] == window[2] {
+    for w in chars.windows(3) {
+        if w[0] == w[1] && w[1] == w[2] {
             penalty += 5.0;
         }
     }
     penalty
 }
 
-fn calculate_sequence_penalty(password: &str) -> f64 {
+fn sequence_penalty(password: &str) -> f64 {
     let chars: Vec<char> = password.chars().collect();
     let mut penalty = 0.0;
-    for window in chars.windows(3) {
-        let a = window[0] as i32;
-        let b = window[1] as i32;
-        let c = window[2] as i32;
+    for w in chars.windows(3) {
+        let (a, b, c) = (w[0] as i32, w[1] as i32, w[2] as i32);
         if (b - a == 1 && c - b == 1) || (b - a == -1 && c - b == -1) {
             penalty += 3.0;
         }
@@ -283,77 +347,85 @@ fn calculate_sequence_penalty(password: &str) -> f64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_common_password_very_weak() {
-        let a = analyze_password("password");
-        assert_eq!(a.level, StrengthLevel::VeryWeak);
+    fn level(pw: &str) -> StrengthLevel {
+        analyze_password(pw).level
     }
 
     #[test]
-    fn test_test123_is_weak_not_strong() {
-        let a = analyze_password("test123");
-        // Must be weak — crack time should be days, not decades
-        assert!(a.score <= 1, "test123 should be Weak or Very Weak, got {:?}", a.level);
-    }
-
-    #[test]
-    fn test_test123_crack_time_is_realistic() {
-        let a = analyze_password("test123");
-        // test123 is a known common password → GPU cracks it instantly (wordlist attack)
-        // Accept "Instantly", "< 1 second", or "A few seconds" — all realistic for a known-bad password
-        let fast = ["Instantly", "< 1 second", "second"];
-        assert!(
-            fast.iter().any(|s| a.gpu_crack_time.contains(s)),
-            "test123 without KDF should crack instantly or in seconds, got: {}",
-            a.gpu_crack_time
-        );
-    }
-
-    #[test]
-    fn test_123456_instant() {
-        let a = analyze_password("123456");
-        assert_eq!(a.level, StrengthLevel::VeryWeak);
-        assert_eq!(a.estimated_crack_time, "Instantly");
-    }
-
-    #[test]
-    fn test_short_password_weak() {
-        let a = analyze_password("Abc1!");
-        assert!(a.score <= 2);
-    }
-
-    #[test]
-    fn test_strong_password() {
-        let a = analyze_password("X7$kP2@mQ9!vL4#nR");
-        assert!(a.score >= 3, "Expected strong, got {:?}", a.level);
-    }
-
-    #[test]
-    fn test_strong_password_crack_time_long() {
-        let a = analyze_password("X7$kP2@mQ9!vL4#nR");
-        // Should crack in millions+ of years even with GPU
-        assert!(
-            a.gpu_crack_time.contains("years") || a.gpu_crack_time.contains("Millions"),
-            "Strong password GPU crack time should be years, got: {}",
-            a.gpu_crack_time
-        );
-    }
-
-    #[test]
-    fn test_empty_password() {
+    fn empty_is_very_weak() {
         let a = analyze_password("");
         assert_eq!(a.level, StrengthLevel::VeryWeak);
         assert_eq!(a.length, 0);
     }
 
     #[test]
-    fn test_all_digits_pattern() {
-        let a = analyze_password("98765432");
-        // 8 digits without KDF: 10^8 / 10^10 = 0.01 seconds
-        assert!(
-            a.gpu_crack_time.contains("< 1 second") || a.gpu_crack_time.contains("second"),
-            "8-digit number should crack quickly: {}",
-            a.gpu_crack_time
-        );
+    fn common_passwords_are_weak() {
+        for pw in ["password", "123456", "qwerty", "admin", "test123", "qwerty123"] {
+            assert!(
+                level(pw).score() <= 1,
+                "{pw} should be very weak/weak, got {:?}",
+                level(pw)
+            );
+        }
+    }
+
+    #[test]
+    fn word_plus_digits_are_capped() {
+        // Must never be Strong/Excellent.
+        for pw in ["password123", "admin123", "test123", "qwerty123"] {
+            assert!(level(pw).score() <= 2, "{pw} got {:?}", level(pw));
+        }
+    }
+
+    #[test]
+    fn asdqwerty123_is_not_strong() {
+        let s = level("asdqwerty123").score();
+        // Spec: must be Weak or Fair (never Strong+).
+        assert!((1..=2).contains(&s), "asdqwerty123 score was {s}");
+    }
+
+    #[test]
+    fn keyboard_and_repeat_patterns_weak() {
+        for pw in ["asdasdasd", "qwerty123", "asdfghjkl", "1234567890", "abcabcabc"] {
+            assert!(level(pw).score() <= 1, "{pw} got {:?}", level(pw));
+        }
+    }
+
+    #[test]
+    fn sequential_digits_weak() {
+        assert!(level("123456789").score() <= 1);
+    }
+
+    #[test]
+    fn genuinely_strong_password_scores_high() {
+        let a = analyze_password("X7$kP2@mQ9!vL4#nR");
+        assert!(a.score >= 3, "expected strong+, got {:?}", a.level);
+    }
+
+    #[test]
+    fn passphrase_is_decent() {
+        // Long unrelated words → at least Fair.
+        let a = analyze_password("correct-horse-battery-staple-42");
+        assert!(a.score >= 2, "got {:?}", a.level);
+    }
+
+    #[test]
+    fn never_reports_absurd_times() {
+        for pw in ["X7$kP2@mQ9!vL4#nR", "correct-horse-battery-staple-42", "test123", ""] {
+            let a = analyze_password(pw);
+            for t in [&a.estimated_crack_time, &a.gpu_crack_time] {
+                let low = t.to_lowercase();
+                assert!(
+                    !low.contains("million") && !low.contains("billion"),
+                    "absurd time for {pw}: {t}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strong_time_bucket_is_years_not_absurd() {
+        let a = analyze_password("X7$kP2@mQ9!vL4#nR");
+        assert!(a.estimated_crack_time.to_lowercase().contains("years"));
     }
 }

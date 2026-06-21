@@ -3,13 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
-import {
-  File, Folder, FileText, Image, Video, Music,
-  Archive as ArchiveIcon, Table2,
-  Eye, EyeOff, Loader2, X, Plus, FolderOpen,
-  Lock, ShieldCheck, HardDrive,
-} from "lucide-react";
+import { Eye, EyeOff, X } from "lucide-react";
 import PasswordStrength from "../components/PasswordStrength";
+import { ArchiveBox, InkFileGlyph, Keyhole } from "../components/art";
 import type {
   CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
 } from "../types";
@@ -31,96 +27,75 @@ function formatBytes(b: number): string {
 
 function basename(p: string) { return p.replace(/\\/g, "/").split("/").pop() ?? p; }
 
-type FileTypeInfo = { color: string; bg: string; Icon: React.ElementType };
-
-function getTypeInfo(path: string, isDir: boolean): FileTypeInfo {
-  if (isDir) return { Icon: Folder,      color: "#F59E0B", bg: "#FFFBEB" };
+/** Ink tint per file type — the glyph stays a hand-drawn paper slip. */
+function typeTint(path: string, isDir: boolean): string {
+  if (isDir) return "#C9760E";
   const ext = basename(path).split(".").pop()?.toLowerCase() ?? "";
-  switch (ext) {
-    case "pdf":
-      return { Icon: FileText,   color: "#DC2626", bg: "#FEF2F2" };
-    case "jpg": case "jpeg": case "png": case "gif": case "webp": case "svg": case "heic":
-      return { Icon: Image,      color: "#7C3AED", bg: "#F5F3FF" };
-    case "xlsx": case "xls": case "csv": case "ods":
-      return { Icon: Table2,     color: "#059669", bg: "#ECFDF5" };
-    case "doc": case "docx": case "txt": case "md": case "odt":
-      return { Icon: FileText,   color: "#2563EB", bg: "#EFF6FF" };
-    case "zip": case "rar": case "7z": case "tar": case "gz": case "bz2":
-      return { Icon: ArchiveIcon, color: "#D97706", bg: "#FFFBEB" };
-    case "mp4": case "mov": case "avi": case "mkv": case "webm":
-      return { Icon: Video,      color: "#EA580C", bg: "#FFF7ED" };
-    case "mp3": case "wav": case "flac": case "aac": case "ogg":
-      return { Icon: Music,      color: "#DB2777", bg: "#FDF2F8" };
-    default:
-      return { Icon: File,       color: "#6B7280", bg: "#F9FAFB" };
-  }
+  if (["pdf"].includes(ext)) return "#B23A35";
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg", "heic"].includes(ext)) return "#5B53C6";
+  if (["xlsx", "xls", "csv", "ods"].includes(ext)) return "#3E7D5A";
+  if (["doc", "docx", "txt", "md", "odt"].includes(ext)) return "#48409E";
+  if (["zip", "rar", "7z", "tar", "gz", "bz2"].includes(ext)) return "#C9760E";
+  if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext)) return "#EA580C";
+  if (["mp3", "wav", "flac", "aac", "ogg"].includes(ext)) return "#DB2777";
+  return "#5B5347";
 }
 
 interface FileMeta { size: number; isDir: boolean; }
 
-const VALUES = [
-  { Icon: Lock,       label: "End-to-end encrypted", desc: "Files encrypted individually" },
-  { Icon: EyeOff,     label: "File names hidden",     desc: "Archive contents not visible" },
-  { Icon: ShieldCheck, label: "Tamper detection",     desc: "BLAKE3 hash verifies every byte" },
-  { Icon: HardDrive,  label: "Stays on your device",  desc: "No cloud upload, ever" },
-];
-
-/* ── File card ────────────────────────────────────────────────────────────── */
-function FileCard({
-  path, meta, onRemove,
-}: {
-  path: string;
-  meta: FileMeta | undefined;
-  onRemove: () => void;
+/* ── Ink file card (paper slip) ───────────────────────────────────────────── */
+function FileCard({ path, meta, onRemove }: {
+  path: string; meta: FileMeta | undefined; onRemove: () => void;
 }) {
   const name = basename(path);
   const isDir = meta?.isDir ?? false;
-  const { Icon, color, bg } = getTypeInfo(path, isDir);
-
   return (
-    <div className="file-card group">
-      <button
-        onClick={onRemove}
-        className="file-card-remove"
-        title="Remove"
-      >
-        <X size={11} />
-      </button>
-
-      <div className="file-card-icon" style={{ backgroundColor: bg }}>
-        <Icon size={22} style={{ color }} strokeWidth={1.5} />
+    <div className="ink-card group">
+      <InkFileGlyph size={32} tint={typeTint(path, isDir)} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-ink truncate">{name}</p>
+        <p className="text-[11px] text-ink-faint tabular-nums">
+          {meta === undefined ? "…" : isDir ? "Folder" : meta.size > 0 ? formatBytes(meta.size) : "—"}
+        </p>
       </div>
-
-      <p className="file-card-name">{name}</p>
-
-      <p className="file-card-size">
-        {meta === undefined
-          ? "…"
-          : isDir
-          ? "Folder"
-          : meta.size > 0
-          ? formatBytes(meta.size)
-          : "—"}
-      </p>
+      <button onClick={onRemove} className="ink-card-remove" title="Remove"><X size={13} /></button>
     </div>
   );
 }
 
-/* ── Value strip ──────────────────────────────────────────────────────────── */
-function ValueStrip() {
+/* ── Sealing (progress) ───────────────────────────────────────────────────── */
+function Sealing({ progress }: { progress: ProgressEvent | null }) {
+  const pct = progress && progress.total > 0
+    ? Math.round((progress.current / progress.total) * 100)
+    : 0;
+  const sealing = progress != null && progress.current >= progress.total && progress.total > 0;
+
   return (
-    <div className="value-strip">
-      {VALUES.map(({ Icon, label, desc }) => (
-        <div key={label} className="value-item">
-          <div className="value-icon-wrap">
-            <Icon size={18} className="text-accent" strokeWidth={2} />
+    <div className="canvas">
+      <div className="canvas-center px-10 gap-8 animate-fade-in">
+        <div className="animate-scale-in" style={{ animationDuration: "0.5s" }}>
+          <ArchiveBox variant="sealed" size={176} />
+        </div>
+
+        <div className="text-center space-y-1.5">
+          <h2 className="font-serif text-[26px] font-semibold tracking-tight text-ink">
+            {progress == null ? "Preparing…" : sealing ? "Pressing the seal…" : "Sealing your files…"}
+          </h2>
+          <p className="text-sm text-ink-faint font-mono truncate max-w-xs mx-auto">
+            {progress?.current_file ? basename(progress.current_file) : " "}
+          </p>
+        </div>
+
+        <div className="w-full max-w-xs space-y-2">
+          <div className="h-2 rounded-full bg-surface-sunken border border-border overflow-hidden">
+            <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${pct}%` }} />
           </div>
-          <div>
-            <p className="text-[12px] font-semibold text-text-primary leading-tight">{label}</p>
-            <p className="text-[11px] text-text-muted mt-0.5 leading-snug">{desc}</p>
+          <div className="flex justify-between text-[11px] text-ink-faint tabular-nums">
+            <span>Locking with your password</span>
+            <span>{pct}%</span>
           </div>
         </div>
-      ))}
+      </div>
     </div>
   );
 }
@@ -141,12 +116,11 @@ export default function CreateArchive({
   const nameRef = useRef<HTMLInputElement>(null);
 
   const canCreate = files.length > 0 && name.trim().length > 0 && password.length > 0 && !creating;
+  const totalSize = files.reduce((s, p) => s + (fileMetas[p]?.size ?? 0), 0);
 
-  // Fetch file metadata (size + isDir) for newly added files
   useEffect(() => {
     const newPaths = files.filter(p => !(p in fileMetas));
     if (!newPaths.length) return;
-
     Promise.all(newPaths.map(async path => {
       try {
         const m = await stat(path);
@@ -154,9 +128,7 @@ export default function CreateArchive({
       } catch {
         return [path, { size: 0, isDir: false }] as [string, FileMeta];
       }
-    })).then(results => {
-      setFileMetas(prev => ({ ...prev, ...Object.fromEntries(results) }));
-    });
+    })).then(results => setFileMetas(prev => ({ ...prev, ...Object.fromEntries(results) })));
   }, [files]);
 
   const addFiles = useCallback(async () => {
@@ -202,109 +174,90 @@ export default function CreateArchive({
     }
   };
 
-  return (
-    <div className={`canvas ${isDragging ? "ring-2 ring-inset ring-accent/30" : ""}`}>
-      <div className="canvas-body px-8 py-5 space-y-5">
+  if (creating) return <Sealing progress={progress} />;
 
-        {/* Header row */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-text-secondary">
-            {files.length} item{files.length !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex items-center gap-2">
-            <button onClick={addFiles} className="btn-ghost text-xs py-1.5 px-3 gap-1.5">
-              <Plus size={12} /> Add Files
-            </button>
-            <button onClick={addFolder} className="btn-ghost text-xs py-1.5 px-3 gap-1.5">
-              <FolderOpen size={12} /> Add Folder
-            </button>
+  const fileWord = files.length === 1 ? "file" : "files";
+
+  return (
+    <div className={`canvas ${isDragging ? "ring-2 ring-inset ring-accent/40" : ""}`}>
+      <div className="canvas-body px-8 py-7 space-y-7">
+
+        {/* what you selected + intent */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">
+              {files.length} {fileWord} ready
+              {totalSize > 0 && <span className="text-ink-faint font-sans font-normal text-[20px]"> · {formatBytes(totalSize)}</span>}
+            </h2>
+            <p className="text-[13px] text-ink-soft mt-1">
+              Sealed into one <span className="font-mono text-ink">.andrii</span> box only your password can open.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={addFiles} className="btn-ghost text-xs">Add files</button>
+            <button onClick={addFolder} className="btn-ghost text-xs">Add folder</button>
           </div>
         </div>
 
-        {/* File cards grid */}
-        <div className="grid grid-cols-4 gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))" }}>
+        {/* selection — ink paper cards */}
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}>
           {files.map(path => (
-            <FileCard
-              key={path}
-              path={path}
-              meta={fileMetas[path]}
-              onRemove={() => removeFile(path)}
-            />
+            <FileCard key={path} path={path} meta={fileMetas[path]} onRemove={() => removeFile(path)} />
           ))}
         </div>
 
-        {/* Value strip */}
-        <ValueStrip />
-
-        {/* Form */}
-        <div className="space-y-4 pt-1">
-          <input
-            ref={nameRef}
-            type="text"
-            className="input"
-            placeholder="Archive name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleCreate()}
-          />
-
-          <div className="relative">
+        {/* name + password */}
+        <div className="pt-1 space-y-5">
+          <div>
+            <label className="block text-[12px] font-semibold text-ink-soft mb-1">Archive name</label>
             <input
-              type={showPw ? "text" : "password"}
-              className="input pr-10"
-              placeholder="Set a strong password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
+              ref={nameRef}
+              type="text"
+              className="input"
+              placeholder="My documents"
+              value={name}
+              onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleCreate()}
-              autoComplete="new-password"
             />
-            <button
-              type="button"
-              onClick={() => setShowPw(!showPw)}
-              className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-secondary"
-            >
-              {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-            </button>
           </div>
 
-          <PasswordStrength password={password} onResult={setAnalysis} />
+          <div>
+            <label className="block text-[12px] font-semibold text-ink-soft mb-1">Password</label>
+            <div className="relative">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70">
+                <Keyhole size={18} />
+              </span>
+              <input
+                type={showPw ? "text" : "password"}
+                className="input pl-7 pr-10"
+                placeholder="Set the only key to this box"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreate()}
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(!showPw)}
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink"
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div className="mt-2.5">
+              {password
+                ? <PasswordStrength password={password} onResult={setAnalysis} />
+                : <p className="text-[12px] text-ink-faint leading-relaxed">We never see this key, and it can&apos;t be recovered — keep it safe.</p>}
+            </div>
+          </div>
         </div>
 
-        {/* Progress */}
-        {creating && progress && (
-          <div className="space-y-2 pt-1">
-            <div className="flex justify-between text-xs text-text-muted">
-              <span>Encrypting…</span>
-              <span className="font-mono tabular-nums">{progress.current}/{progress.total}</span>
-            </div>
-            <div className="h-1 bg-elevated rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent transition-all duration-200 rounded-full"
-                style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }}
-              />
-            </div>
-            <p className="text-xs text-text-muted font-mono truncate">{progress.current_file}</p>
-          </div>
-        )}
-
-        {error && (
-          <p className="text-xs text-danger-text leading-relaxed">{error}</p>
-        )}
+        {error && <p className="text-[13px] text-wax leading-relaxed">{error}</p>}
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onClear} className="btn-ghost text-sm text-text-muted">
-          Clear all
-        </button>
-        <button
-          onClick={handleCreate}
-          disabled={!canCreate}
-          className="btn-primary gap-2 text-sm"
-        >
-          {creating
-            ? <><Loader2 size={15} className="animate-spin" /> Encrypting…</>
-            : "Create encrypted archive →"}
-        </button>
+        <button onClick={onClear} className="btn-ghost text-sm">Clear</button>
+        <button onClick={handleCreate} disabled={!canCreate} className="btn-primary">Seal archive</button>
       </div>
     </div>
   );

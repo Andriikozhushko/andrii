@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Archive, FolderOpen, ShieldCheck } from "lucide-react";
 import type { CanvasState } from "../types";
 
 interface TitleBarProps {
@@ -9,9 +8,9 @@ interface TitleBarProps {
 }
 
 const NAV = [
-  { mode: "create" as const, icon: Archive,     title: "New Archive"  },
-  { mode: "open"   as const, icon: FolderOpen,  title: "Open Archive" },
-  { mode: "verify" as const, icon: ShieldCheck, title: "Verify"       },
+  { mode: "create" as const, label: "New Archive" },
+  { mode: "open"   as const, label: "Open Archive" },
+  { mode: "verify" as const, label: "Verify" },
 ] as const;
 
 function modeGroup(mode: CanvasState["mode"]): "create" | "open" | "verify" {
@@ -20,15 +19,6 @@ function modeGroup(mode: CanvasState["mode"]): "create" | "open" | "verify" {
   if (mode === "verified") return "verify";
   if (mode === "idle")     return "create";
   return mode as "create" | "open" | "verify";
-}
-
-function stateLabel(state: CanvasState): string {
-  switch (state.mode) {
-    case "created":  return "Protected";
-    case "unlocked": return "Unlocked";
-    case "verified": return "Verified";
-    default:         return "";
-  }
 }
 
 export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
@@ -42,82 +32,86 @@ export default function TitleBar({ canvasState, onNavigate }: TitleBarProps) {
     return () => unlisten?.();
   }, []);
 
-  // Explicit startDragging — more reliable than data-tauri-drag-region in Tauri v2
   const handleDragRegionMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    // Don't drag if clicking an interactive element
     if (target.closest("button, a, input, select")) return;
     win.startDragging();
   };
 
-  const activeGroup = modeGroup(canvasState.mode);
-  const statusLabel = stateLabel(canvasState);
+  const active = modeGroup(canvasState.mode);
 
   return (
-    <div className="title-bar">
-      {/* drag region — wordmark + spacer */}
-      <div
-        className="flex items-center gap-2 pl-4 pr-3 h-full flex-1 cursor-move"
-        onMouseDown={handleDragRegionMouseDown}
-      >
-        <span className="w-[6px] h-[6px] rounded-sm bg-accent inline-block shrink-0 pointer-events-none" />
-        <span className="text-[11px] font-bold tracking-[0.18em] text-text-primary uppercase pointer-events-none">
+    <div className="title-bar" onMouseDown={handleDragRegionMouseDown}>
+      {/* wordmark */}
+      <div className="flex items-center gap-2.5 pl-5 pr-6 h-full cursor-move">
+        <WaxDot />
+        <span className="font-serif text-[17px] font-semibold tracking-[0.04em] text-ink pointer-events-none">
           ANDRII
         </span>
-        {statusLabel && (
-          <span className="text-[11px] text-text-muted pointer-events-none">
-            · {statusLabel}
-          </span>
-        )}
       </div>
 
-      {/* navigation */}
-      <div className="flex items-center gap-0.5 px-2">
-        {NAV.map(({ mode, icon: Icon, title }) => (
+      {/* text nav */}
+      <nav className="flex items-center gap-1 h-full">
+        {NAV.map(({ mode, label }) => (
           <button
             key={mode}
             onClick={() => onNavigate(mode)}
-            title={title}
-            className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors duration-100
-              ${activeGroup === mode
-                ? "text-accent bg-accent/10"
-                : "text-text-muted hover:text-text-secondary hover:bg-elevated"
-              }`}
+            className={`relative h-full px-3.5 text-[13px] font-medium transition-colors duration-150
+              ${active === mode ? "text-accent-text" : "text-ink-faint hover:text-ink"}`}
           >
-            <Icon size={15} />
+            {label}
+            {active === mode && (
+              <span className="absolute left-3 right-3 bottom-2 h-[2.5px] rounded-full bg-accent" />
+            )}
           </button>
         ))}
-      </div>
+      </nav>
+
+      <div className="flex-1 cursor-move h-full" />
+
+      {/* settings (placeholder) */}
+      <button
+        className="px-3 text-[12px] text-ink-faint hover:text-ink transition-colors h-full"
+        title="Settings"
+        onClick={() => { /* settings — coming soon */ }}
+      >
+        Settings
+      </button>
 
       {/* window controls */}
-      <div className="flex items-center ml-2 h-full border-l border-border">
+      <div className="flex items-center h-full border-l border-border ml-2">
         <WinBtn onClick={() => win.minimize()} label="Minimize">
-          <svg width="10" height="1" viewBox="0 0 10 1">
-            <line x1="0" y1="0.5" x2="10" y2="0.5" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
+          <svg width="10" height="1" viewBox="0 0 10 1"><line x1="0" y1="0.5" x2="10" y2="0.5" stroke="currentColor" strokeWidth="1.4" /></svg>
         </WinBtn>
         <WinBtn onClick={() => win.toggleMaximize()} label={maximized ? "Restore" : "Maximize"}>
           {maximized ? (
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect x="2" y="0" width="8" height="8" stroke="currentColor" strokeWidth="1.2" />
-              <rect x="0" y="2" width="8" height="8" stroke="currentColor" strokeWidth="1.2"
-                fill="rgb(var(--c-surface))" />
+              <rect x="2" y="0" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
+              <rect x="0" y="2" width="8" height="8" stroke="currentColor" strokeWidth="1.4" fill="rgb(var(--c-bg))" />
             </svg>
           ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <rect x="0.6" y="0.6" width="8.8" height="8.8" stroke="currentColor" strokeWidth="1.2" />
-            </svg>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="0.7" y="0.7" width="8.6" height="8.6" stroke="currentColor" strokeWidth="1.4" /></svg>
           )}
         </WinBtn>
         <WinBtn onClick={() => win.close()} label="Close" isClose>
           <svg width="10" height="10" viewBox="0 0 10 10">
-            <line x1="0.5" y1="0.5" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.2" />
-            <line x1="9.5" y1="0.5" x2="0.5" y2="9.5" stroke="currentColor" strokeWidth="1.2" />
+            <line x1="0.5" y1="0.5" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1.4" />
+            <line x1="9.5" y1="0.5" x2="0.5" y2="9.5" stroke="currentColor" strokeWidth="1.4" />
           </svg>
         </WinBtn>
       </div>
     </div>
+  );
+}
+
+/* a little hand-drawn wax dot mark */
+function WaxDot() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="pointer-events-none shrink-0">
+      <circle cx="8" cy="8" r="6.5" fill="#B23A35" stroke="#8E2B27" strokeWidth="1.5" />
+      <path d="M3 7 a5 5 0 0 1 8 -1" stroke="#ffffff" strokeOpacity="0.3" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -133,11 +127,8 @@ function WinBtn({
     <button
       onClick={onClick}
       title={label}
-      className={`w-11 h-full flex items-center justify-center text-text-muted transition-colors duration-100
-        ${isClose
-          ? "hover:bg-red-500 hover:text-white"
-          : "hover:bg-elevated hover:text-text-secondary"
-        }`}
+      className={`w-11 h-full flex items-center justify-center text-ink-soft transition-colors duration-100
+        ${isClose ? "hover:bg-wax hover:text-white" : "hover:bg-hover hover:text-ink"}`}
     >
       {children}
     </button>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ShieldCheck, ShieldX, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { WaxSeal, CrackedSeal, SealInspector } from "../components/art";
 import type { VerifyResult } from "../types";
 
 interface VerifyArchiveProps {
@@ -24,9 +24,7 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
     setResult(null);
     setError(null);
     try {
-      const r = await invoke<VerifyResult>("verify_archive_cmd", {
-        request: { archive_path: path },
-      });
+      const r = await invoke<VerifyResult>("verify_archive_cmd", { request: { archive_path: path } });
       setResult(r);
     } catch (e) {
       setError(String(e));
@@ -39,98 +37,54 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
   const isTampered  = result && !result.is_valid && result.has_valid_magic
     && result.version_supported && !result.integrity_hash_valid;
   const isUnknown   = result && !result.has_valid_magic;
+  const intact      = result?.is_valid ?? false;
 
   return (
-    <div className="canvas bg-surface">
-      <div className="canvas-center px-10">
-        <div className="w-full max-w-sm space-y-6 animate-fade-in">
+    <div className="canvas">
+      <div className="canvas-center px-10 gap-7">
+        {verifying ? (
+          <div className="flex flex-col items-center gap-5 animate-fade-in">
+            <div className="animate-pulse"><SealInspector size={150} /></div>
+            <p className="text-sm text-ink-faint">Checking the seal…</p>
+          </div>
 
-          {verifying ? (
-            <div className="flex flex-col items-center gap-4 py-4">
-              <div className="w-12 h-12 rounded-full border-2 border-border border-t-accent animate-spin" />
-              <p className="text-sm text-text-muted">Checking integrity…</p>
+        ) : result ? (
+          <div className="flex flex-col items-center gap-6 animate-fade-in">
+            {intact ? (
+              <div className="animate-stamp-in"><WaxSeal size={156} /></div>
+            ) : (
+              <div className={isTampered ? "animate-shake" : ""}><CrackedSeal size={156} /></div>
+            )}
+
+            <div className="text-center space-y-2">
+              <h2 className={`font-serif text-[30px] font-semibold tracking-tight leading-tight
+                ${intact ? "text-safe-deep" : "text-wax-deep"}`}>
+                {intact ? "Seal intact" : isUnknown ? "No seal found" : "Seal broken"}
+              </h2>
+              <p className="text-[15px] text-ink-soft max-w-sm mx-auto leading-relaxed">
+                {intact
+                  ? "This .andrii archive has not been modified."
+                  : isUnknown
+                  ? "This file isn't an ANDRII archive, so there's no seal to check."
+                  : "This archive was modified. Do not trust it."}
+              </p>
+              {archiveName && (
+                <p className="font-mono text-[12px] text-ink-faint pt-1 truncate max-w-xs mx-auto">{archiveName}</p>
+              )}
             </div>
 
-          ) : result ? (
-            <>
-              {/* Verdict */}
-              {result.is_valid ? (
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center shrink-0">
-                    <ShieldCheck size={24} className="text-accent" />
-                  </div>
-                  <div className="pt-1">
-                    <p className="text-base font-semibold text-text-primary">Archive is authentic</p>
-                    <p className="text-sm text-text-muted mt-0.5">
-                      {archiveName && <span className="font-mono">{archiveName} — </span>}
-                      contents unmodified since creation
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-danger/10 flex items-center justify-center shrink-0">
-                    <ShieldX size={24} className="text-danger" />
-                  </div>
-                  <div className="pt-1">
-                    <p className="text-base font-semibold text-danger-text">
-                      {isTampered ? "Archive has been modified"
-                        : isUnknown ? "Not a valid ANDRII archive"
-                        : "Verification failed"}
-                    </p>
-                    <p className="text-sm text-text-muted mt-0.5">
-                      {isTampered
-                        ? "Do not extract. Content cannot be trusted."
-                        : (result.error ?? "")}
-                    </p>
-                  </div>
-                </div>
-              )}
+            {archivePath && (
+              <button onClick={() => runVerify(archivePath)} className="btn-secondary text-sm">Check again</button>
+            )}
+          </div>
 
-              {/* Check rows */}
-              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-                <CheckRow ok={result.has_valid_magic}      label="Valid ANDRII format"   desc="Magic bytes and structure recognized" />
-                <CheckRow ok={result.version_supported}    label="Supported version"     desc={`Format v${result.format_version}`}  warn={!result.version_supported && result.has_valid_magic} />
-                <CheckRow ok={result.integrity_hash_valid} label="Content integrity"     desc="BLAKE3 hash matches original"        critical={!result.integrity_hash_valid && result.version_supported} />
-              </div>
-
-              {archivePath && (
-                <button
-                  onClick={() => runVerify(archivePath)}
-                  className="btn-ghost text-xs text-text-muted"
-                >
-                  Verify again
-                </button>
-              )}
-            </>
-
-          ) : error ? (
-            <p className="text-sm text-danger-text">{error}</p>
-          ) : null}
-
-        </div>
+        ) : error ? (
+          <p className="text-sm text-wax">{error}</p>
+        ) : null}
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onBack} className="btn-ghost text-sm text-text-muted">
-          ← Back
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CheckRow({ ok, label, desc, warn = false, critical = false }: {
-  ok: boolean; label: string; desc: string; warn?: boolean; critical?: boolean;
-}) {
-  const Icon  = ok ? CheckCircle2 : (critical || (!warn && !ok)) ? XCircle : AlertCircle;
-  const color = ok ? "text-accent" : critical ? "text-danger-text" : warn ? "text-warning-text" : "text-danger-text";
-  return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      <Icon size={15} className={`${color} shrink-0 mt-0.5`} />
-      <div>
-        <p className="text-sm font-medium text-text-primary">{label}</p>
-        <p className="text-xs text-text-muted">{desc}</p>
+        <button onClick={onBack} className="btn-ghost text-sm">← Back</button>
       </div>
     </div>
   );

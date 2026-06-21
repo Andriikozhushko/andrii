@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
-  Eye, EyeOff, Loader2, File, Folder,
-  ArrowDownToLine, ShieldCheck, ChevronDown, ChevronUp, X,
+  Eye, EyeOff, Loader2, ArrowDownToLine, ChevronDown, ChevronUp, X,
 } from "lucide-react";
+import { PaperBundle, InkFileGlyph, Keyhole } from "../components/art";
 import type { OpenArchiveResponse, ArchiveFileEntry } from "../types";
 
 interface OpenArchiveProps {
@@ -61,21 +61,27 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
   };
 
   return (
-    <div className="canvas bg-surface">
+    <div className="canvas">
       <div className="canvas-center px-10">
         <div className="w-full max-w-sm space-y-6">
           {/* Archive identity */}
-          <div>
-            <p className="font-mono text-base font-semibold text-text-primary truncate">{archiveName}</p>
-            <p className="text-xs text-text-muted font-mono truncate mt-0.5">{archivePath}</p>
+          <div className="flex flex-col items-center text-center gap-3">
+            <PaperBundle size={118} />
+            <div className="min-w-0">
+              <p className="font-mono text-base font-semibold text-ink truncate max-w-xs">{archiveName}</p>
+              <p className="text-xs text-ink-faint mt-1">Enter the password to unlock this box.</p>
+            </div>
           </div>
 
           {/* Password */}
           <div className="space-y-2">
             <div className="relative">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70">
+                <Keyhole size={18} />
+              </span>
               <input
                 type={showPw ? "text" : "password"}
-                className="input pr-10 text-base"
+                className="input pl-7 pr-10 text-base"
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -86,14 +92,12 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-secondary"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink"
               >
                 {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            {error && (
-              <p className="text-sm text-danger-text">{error}</p>
-            )}
+            {error && <p className="text-sm text-wax">{error}</p>}
           </div>
 
           <button
@@ -103,15 +107,13 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
           >
             {loading
               ? <><Loader2 size={15} className="animate-spin" /> Unlocking…</>
-              : "Unlock archive →"}
+              : "Open box"}
           </button>
         </div>
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onBack} className="btn-ghost text-sm text-text-muted">
-          ← Back
-        </button>
+        <button onClick={onBack} className="btn-ghost text-sm">← Back</button>
       </div>
     </div>
   );
@@ -206,7 +208,7 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
         onClick={() => setShowInfo(!showInfo)}
       >
         <div className="flex items-center gap-2">
-          <ShieldCheck size={14} className="text-accent shrink-0" />
+          <InkFileGlyph size={18} className="shrink-0" />
           <span className="text-sm font-semibold text-text-primary flex-1 font-mono">{info.archive_name}</span>
           <span className="text-xs text-text-muted">
             {info.file_count} files · {formatBytes(info.total_original_size)}
@@ -282,9 +284,7 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
                   onClick={e => e.stopPropagation()}
                   className="w-3.5 h-3.5 accent-accent rounded shrink-0"
                 />
-                {dir
-                  ? <Folder size={14} className="text-warning shrink-0" />
-                  : <File   size={14} className="text-text-muted shrink-0" />}
+                <InkFileGlyph size={18} tint={dir ? "#C9760E" : "#5B5347"} className="shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="font-mono text-sm text-text-primary truncate">{name}</div>
                   <div className="text-xs text-text-muted truncate leading-tight">{entry.path}</div>
