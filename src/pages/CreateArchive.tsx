@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
@@ -18,6 +18,8 @@ interface CreateArchiveProps {
   onCreated: (result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel) => void;
   onClear: () => void;
 }
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function formatBytes(b: number): string {
   if (b < 1024)       return `${b} B`;
@@ -42,14 +44,14 @@ function typeTint(path: string, isDir: boolean): string {
 
 interface FileMeta { size: number; isDir: boolean; }
 
-function FileCard({ path, meta, onRemove }: {
-  path: string; meta: FileMeta | undefined; onRemove: () => void;
+function FileCard({ path, meta, index, onRemove }: {
+  path: string; meta: FileMeta | undefined; index: number; onRemove: () => void;
 }) {
   const t = useT();
   const name = basename(path);
   const isDir = meta?.isDir ?? false;
   return (
-    <div className="ink-card group">
+    <div className="ink-card group assemble" style={{ animationDelay: `${Math.min(index, 12) * 40}ms` }}>
       <InkFileGlyph size={32} tint={typeTint(path, isDir)} />
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium text-ink truncate">{name}</p>
@@ -62,55 +64,77 @@ function FileCard({ path, meta, onRemove }: {
   );
 }
 
-function Sealing({ progress }: { progress: ProgressEvent | null }) {
+/* ── Sealing — staged process ladder ──────────────────────────────────────── */
+function StepDot({ state }: { state: "done" | "active" | "pending" }) {
+  if (state === "done") {
+    return (
+      <span className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shrink-0">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5 L5 9 L9.5 3.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </span>
+    );
+  }
+  if (state === "active") {
+    return <span className="w-5 h-5 rounded-full border-2 border-accent animate-pulse shrink-0" />;
+  }
+  return <span className="w-5 h-5 rounded-full border-2 border-border-strong shrink-0" />;
+}
+
+function Sealing({ stage, progress }: { stage: 0 | 1 | 2 | 3; progress: ProgressEvent | null }) {
   const t = useT();
+  const steps = [t("create.stepCollecting"), t("create.stepEncrypting"), t("create.stepSealing"), t("create.stepFinalizing")];
   const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-  const sealing = progress != null && progress.current >= progress.total && progress.total > 0;
+
   return (
     <div className="canvas">
-      <div className="canvas-center px-10 gap-8 animate-fade-in">
+      <div className="canvas-center px-10 gap-9 animate-fade-in">
         <div className="animate-scale-in" style={{ animationDuration: "0.5s" }}>
-          <ArchiveBox variant="sealed" size={176} />
-        </div>
-        <div className="text-center space-y-1.5">
-          <h2 className="font-serif text-[26px] font-semibold tracking-tight text-ink">
-            {progress == null ? t("create.preparing") : sealing ? t("create.pressing") : t("create.sealing")}
-          </h2>
-          <p className="text-sm text-ink-faint font-mono truncate max-w-xs mx-auto">
-            {progress?.current_file ? basename(progress.current_file) : " "}
-          </p>
-        </div>
-        <div className="w-full max-w-xs space-y-2">
-          <div className="h-2 rounded-full bg-surface-sunken border border-border overflow-hidden">
-            <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="flex justify-between text-[11px] text-ink-faint tabular-nums">
-            <span>{t("create.lockingWith")}</span><span>{pct}%</span>
+          <div className="animate-pulse" style={{ animationDuration: "2.4s" }}>
+            <ArchiveBox variant="sealed" size={168} />
           </div>
         </div>
+
+        <div className="w-full max-w-[260px] space-y-3.5">
+          {steps.map((label, i) => (
+            <div key={i} className="flex items-center gap-3 transition-opacity duration-300"
+              style={{ opacity: i <= stage ? 1 : 0.45 }}>
+              <StepDot state={i < stage ? "done" : i === stage ? "active" : "pending"} />
+              <span className={`text-[14px] ${i === stage ? "font-medium text-ink" : "text-ink-soft"}`}>{label}</span>
+              {i === 1 && stage === 1 && <span className="ml-auto text-[12px] text-ink-faint tabular-nums">{pct}%</span>}
+            </div>
+          ))}
+        </div>
+
+        {stage === 1 && progress?.current_file && (
+          <p className="text-[12px] text-ink-faint font-mono truncate max-w-xs -mt-3">{basename(progress.current_file)}</p>
+        )}
       </div>
     </div>
   );
 }
 
+/* ── CreateArchive flow ───────────────────────────────────────────────────── */
 export default function CreateArchive({
   files, isDragging, onFilesChange, onCreated, onClear,
 }: CreateArchiveProps) {
   const t = useT();
+  const [step, setStep]           = useState<"files" | "config">("files");
   const [name, setName]           = useState("");
   const [password, setPassword]   = useState("");
   const [showPw, setShowPw]       = useState(false);
   const [compression]             = useState<CompressionLevel>("Balanced");
   const [analysis, setAnalysis]   = useState<PasswordStrengthResult | null>(null);
   const [creating, setCreating]   = useState(false);
+  const [sealStage, setSealStage] = useState<0 | 1 | 2 | 3>(0);
   const [progress, setProgress]   = useState<ProgressEvent | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [fileMetas, setFileMetas] = useState<Record<string, FileMeta>>({});
-  const nameRef = useRef<HTMLInputElement>(null);
 
-  const canCreate = files.length > 0 && name.trim().length > 0 && password.length > 0 && !creating;
   const totalSize = files.reduce((s, p) => s + (fileMetas[p]?.size ?? 0), 0);
   const fileWord = t(files.length === 1 ? "common.file" : "common.files");
+  const canSeal = name.trim().length > 0 && password.length > 0 && !creating;
+
+  // If all files get removed, fall back to the files step.
+  useEffect(() => { if (files.length === 0 && step === "config") setStep("files"); }, [files.length, step]);
 
   useEffect(() => {
     const newPaths = files.filter(p => !(p in fileMetas));
@@ -143,8 +167,8 @@ export default function CreateArchive({
     onFilesChange(files.filter(f => f !== path));
   }, [files, onFilesChange]);
 
-  const handleCreate = async () => {
-    if (!canCreate) return;
+  const handleSeal = async () => {
+    if (!canSeal) return;
     const outputPath = await save({
       defaultPath: `${name.trim()}.andrii`,
       filters: [{ name: "ANDRII Archive", extensions: ["andrii"] }],
@@ -152,28 +176,89 @@ export default function CreateArchive({
     if (!outputPath) return;
 
     setCreating(true);
+    setSealStage(0);
     setError(null);
-    const unlisten = await listen<ProgressEvent>("archive-progress", e => setProgress(e.payload));
+    const unlisten = await listen<ProgressEvent>("archive-progress", e => {
+      setProgress(e.payload);
+      setSealStage(e.payload.total > 0 && e.payload.current >= e.payload.total ? 2 : 1);
+    });
     try {
       const res = await invoke<CreateArchiveResponse>("create_archive", {
         request: { file_paths: files, output_path: outputPath, archive_name: name.trim(), password, compression },
       });
+      setSealStage(3);
+      await sleep(550);
       onCreated(res, analysis, compression);
     } catch (e) {
       setError(String(e));
-    } finally {
       setCreating(false);
       setProgress(null);
+    } finally {
       unlisten();
     }
   };
 
-  if (creating) return <Sealing progress={progress} />;
+  /* ── State 4: Sealing ── */
+  if (creating) return <Sealing stage={sealStage} progress={progress} />;
 
+  /* ── State 3: Configuration (name + password appear ONLY here) ── */
+  if (step === "config") {
+    return (
+      <div className="canvas animate-fade-in">
+        <div className="canvas-body px-8 py-7">
+          <div className="max-w-md mx-auto w-full space-y-7">
+            <div>
+              <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">{t("create.seal")}</h2>
+              <button onClick={() => setStep("files")} className="text-[13px] text-ink-faint hover:text-accent-text transition-colors mt-1">
+                {t("create.ready", { count: files.length, files: fileWord })}{totalSize > 0 ? ` · ${formatBytes(totalSize)}` : ""} · {t("create.editFiles")}
+              </button>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-soft mb-1">
+                <InkQuill size={14} /> {t("create.archiveName")}
+              </label>
+              <input type="text" className="input" placeholder={t("create.archiveNamePlaceholder")} autoFocus
+                value={name} onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSeal()} />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-semibold text-ink-soft mb-1">{t("create.password")}</label>
+              <div className="relative">
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
+                <input type={showPw ? "text" : "password"} className="input pl-7 pr-10"
+                  placeholder={t("create.passwordPlaceholder")} value={password}
+                  onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSeal()}
+                  autoComplete="new-password" />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink">
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <div className="mt-2.5">
+                {password
+                  ? <PasswordStrength password={password} onResult={setAnalysis} />
+                  : <p className="text-[12px] text-ink-faint leading-relaxed">{t("create.passwordHint")}</p>}
+              </div>
+            </div>
+
+            {error && <p className="text-[13px] text-wax leading-relaxed">{error}</p>}
+          </div>
+        </div>
+
+        <div className="bottom-bar">
+          <button onClick={() => setStep("files")} className="btn-ghost text-sm">← {t("common.back")}</button>
+          <button onClick={handleSeal} disabled={!canSeal} className="btn-primary"><InkStamp /> {t("create.seal")}</button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── State 2: Files selected ── */
   return (
-    <div className={`canvas ${isDragging ? "ring-2 ring-inset ring-accent/40" : ""}`}>
-      <div className="canvas-body px-8 py-7 space-y-7">
-        {/* selected + intent */}
+    <div className={`canvas animate-fade-in ${isDragging ? "ring-2 ring-inset ring-accent/40" : ""}`}>
+      <div className="canvas-body px-8 py-7 space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">
@@ -188,58 +273,18 @@ export default function CreateArchive({
           </div>
         </div>
 
-        {/* selection */}
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))" }}>
-          {files.map(path => (
-            <FileCard key={path} path={path} meta={fileMetas[path]} onRemove={() => removeFile(path)} />
+          {files.map((path, i) => (
+            <FileCard key={path} path={path} meta={fileMetas[path]} index={i} onRemove={() => removeFile(path)} />
           ))}
         </div>
-
-        {/* name + password */}
-        <div className="pt-1 space-y-5">
-          <div>
-            <label className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-soft mb-1">
-              <InkQuill size={14} /> {t("create.archiveName")}
-            </label>
-            <input
-              ref={nameRef} type="text" className="input"
-              placeholder={t("create.archiveNamePlaceholder")}
-              value={name} onChange={e => setName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleCreate()}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[12px] font-semibold text-ink-soft mb-1">{t("create.password")}</label>
-            <div className="relative">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
-              <input
-                type={showPw ? "text" : "password"} className="input pl-7 pr-10"
-                placeholder={t("create.passwordPlaceholder")}
-                value={password} onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreate()}
-                autoComplete="new-password"
-              />
-              <button type="button" onClick={() => setShowPw(!showPw)}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink">
-                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-
-            <div className="mt-2.5">
-              {password
-                ? <PasswordStrength password={password} onResult={setAnalysis} />
-                : <p className="text-[12px] text-ink-faint leading-relaxed">{t("create.passwordHint")}</p>}
-            </div>
-          </div>
-        </div>
-
-        {error && <p className="text-[13px] text-wax leading-relaxed">{error}</p>}
       </div>
 
       <div className="bottom-bar">
         <button onClick={onClear} className="btn-ghost text-sm">{t("common.clear")}</button>
-        <button onClick={handleCreate} disabled={!canCreate} className="btn-primary"><InkStamp /> {t("create.seal")}</button>
+        <button onClick={() => setStep("config")} disabled={files.length === 0} className="btn-primary">
+          {t("create.continue")} →
+        </button>
       </div>
     </div>
   );

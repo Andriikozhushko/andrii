@@ -36,7 +36,13 @@
     "preparing": "Preparing…",
     "sealing": "Sealing your files…",
     "pressing": "Pressing the seal…",
-    "lockingWith": "Locking with your password"
+    "lockingWith": "Locking with your password",
+    "continue": "Continue",
+    "editFiles": "Edit files",
+    "stepCollecting": "Collecting files",
+    "stepEncrypting": "Encrypting content",
+    "stepSealing": "Sealing archive",
+    "stepFinalizing": "Finalizing"
   },
   "open": {
     "title": "Open an archive",

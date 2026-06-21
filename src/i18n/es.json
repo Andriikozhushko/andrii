@@ -36,7 +36,13 @@
     "preparing": "Preparando…",
     "sealing": "Sellando tus archivos…",
     "pressing": "Presionando el sello…",
-    "lockingWith": "Cerrando con tu contraseña"
+    "lockingWith": "Cerrando con tu contraseña",
+    "continue": "Continuar",
+    "editFiles": "Editar archivos",
+    "stepCollecting": "Recopilando archivos",
+    "stepEncrypting": "Cifrando contenido",
+    "stepSealing": "Sellando el archivo",
+    "stepFinalizing": "Finalizando"
   },
   "open": {
     "title": "Abrir archivo",

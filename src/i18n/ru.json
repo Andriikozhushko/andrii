@@ -36,7 +36,13 @@
     "preparing": "Подготовка…",
     "sealing": "Запечатываем ваши файлы…",
     "pressing": "Прижимаем печать…",
-    "lockingWith": "Запираем вашим паролем"
+    "lockingWith": "Запираем вашим паролем",
+    "continue": "Далее",
+    "editFiles": "Изменить файлы",
+    "stepCollecting": "Собираем файлы",
+    "stepEncrypting": "Шифруем содержимое",
+    "stepSealing": "Запечатываем архив",
+    "stepFinalizing": "Завершаем"
   },
   "open": {
     "title": "Открыть архив",

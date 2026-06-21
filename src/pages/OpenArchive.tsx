@@ -66,41 +66,52 @@ export default function OpenArchive({ archivePath, onUnlocked, onBack }: OpenArc
   return (
     <div className="canvas">
       <div className="canvas-center px-10">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="flex flex-col items-center text-center gap-3">
-            <PaperBundle size={118} />
-            <div className="min-w-0">
-              <p className="font-mono text-base font-semibold text-ink truncate max-w-xs">{archiveName}</p>
-              <p className="text-xs text-ink-faint mt-1">{t("open.enterToUnlock")}</p>
-            </div>
+        {loading ? (
+          /* ── Unlocking state ── */
+          <div className="flex flex-col items-center gap-5 animate-fade-in">
+            <div className="animate-pulse"><PaperBundle size={124} /></div>
+            <p className="text-sm text-ink-faint flex items-center gap-2">
+              <Loader2 size={15} className="animate-spin" /> {t("open.unlocking")}
+            </p>
           </div>
-
-          <div className="space-y-2">
-            <div className="relative">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
-              <input
-                type={showPw ? "text" : "password"} className="input pl-7 pr-10 text-base"
-                placeholder={t("open.passwordPlaceholder")}
-                value={password} onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleUnlock()}
-                autoComplete="current-password" autoFocus
-              />
-              <button type="button" onClick={() => setShowPw(!showPw)}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink">
-                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+        ) : (
+          /* ── Password state ── */
+          <div className="w-full max-w-sm space-y-6 animate-fade-in">
+            <div className="flex flex-col items-center text-center gap-3">
+              <PaperBundle size={118} />
+              <div className="min-w-0">
+                <p className="font-mono text-base font-semibold text-ink truncate max-w-xs">{archiveName}</p>
+                <p className="text-xs text-ink-faint mt-1">{t("open.enterToUnlock")}</p>
+              </div>
             </div>
-            {error && <p className="text-sm text-wax">{error}</p>}
-          </div>
 
-          <button onClick={handleUnlock} disabled={!password || loading} className="btn-primary w-full py-3 text-sm">
-            {loading ? <><Loader2 size={15} className="animate-spin" /> {t("open.unlocking")}</> : <><InkKey size={16} /> {t("open.openBox")}</>}
-          </button>
-        </div>
+            <div className="space-y-2">
+              <div className="relative">
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
+                <input
+                  type={showPw ? "text" : "password"} className="input pl-7 pr-10 text-base"
+                  placeholder={t("open.passwordPlaceholder")}
+                  value={password} onChange={e => setPassword(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                  autoComplete="current-password" autoFocus
+                />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-ink-faint hover:text-ink">
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              {error && <p className="text-sm text-wax">{error}</p>}
+            </div>
+
+            <button onClick={handleUnlock} disabled={!password} className="btn-primary w-full py-3 text-sm">
+              <InkKey size={16} /> {t("open.openBox")}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bottom-bar">
-        <button onClick={onBack} className="btn-ghost text-sm">← {t("common.back")}</button>
+        {!loading && <button onClick={onBack} className="btn-ghost text-sm">← {t("common.back")}</button>}
       </div>
     </div>
   );
@@ -234,7 +245,13 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
       </div>
 
       {/* file table */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
+        {extracting && (
+          <div className="absolute inset-0 z-10 bg-bg/70 flex flex-col items-center justify-center gap-3 animate-fade-in">
+            <Loader2 size={22} className="animate-spin text-accent" />
+            <span className="text-sm text-ink-soft">{t("open.extracting")}</span>
+          </div>
+        )}
         <div className="px-8 py-1">
           <div className="file-row">
             <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 accent-accent rounded" />

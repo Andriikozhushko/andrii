@@ -36,7 +36,13 @@
     "preparing": "Préparation…",
     "sealing": "Scellage de vos fichiers…",
     "pressing": "Apposition du sceau…",
-    "lockingWith": "Verrouillage avec votre mot de passe"
+    "lockingWith": "Verrouillage avec votre mot de passe",
+    "continue": "Continuer",
+    "editFiles": "Modifier les fichiers",
+    "stepCollecting": "Collecte des fichiers",
+    "stepEncrypting": "Chiffrement du contenu",
+    "stepSealing": "Scellage de l'archive",
+    "stepFinalizing": "Finalisation"
   },
   "open": {
     "title": "Ouvrir une archive",

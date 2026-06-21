@@ -36,7 +36,13 @@
     "preparing": "Vorbereiten…",
     "sealing": "Ihre Dateien werden versiegelt…",
     "pressing": "Siegel wird gepresst…",
-    "lockingWith": "Wird mit Ihrem Passwort verschlossen"
+    "lockingWith": "Wird mit Ihrem Passwort verschlossen",
+    "continue": "Weiter",
+    "editFiles": "Dateien bearbeiten",
+    "stepCollecting": "Dateien sammeln",
+    "stepEncrypting": "Inhalt verschlüsseln",
+    "stepSealing": "Archiv versiegeln",
+    "stepFinalizing": "Abschließen"
   },
   "open": {
     "title": "Archiv öffnen",
