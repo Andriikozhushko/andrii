@@ -72,12 +72,16 @@ export default function SecurityReport({ result, durationMs, onDone, onCreateAno
         <div className="w-full max-w-sm rounded-2xl border border-border-strong bg-surface shadow-card overflow-hidden">
           <div className="px-4 py-3.5">
             <p className="font-mono text-sm font-medium text-ink truncate">{archiveName}</p>
-            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-faint tabular-nums">
-              <span>{t("protected.inside", { count: result.file_count, files: fileWord })}</span>
-              <span>{formatBytes(result.total_original_size)} → {formatBytes(result.total_compressed_size)}</span>
-              {saved > 0 && <span>{t("protected.smaller", { pct: saved })}</span>}
-              <span>{formatDuration(durationMs)}</span>
-            </div>
+            {/* Phase 7 — calm two-line summary: sizes, then time + savings. */}
+            <p className="mt-1.5 text-[12px] text-ink-soft tabular-nums">
+              {t("protected.inside", { count: result.file_count, files: fileWord })}
+              {" · "}
+              {formatBytes(result.total_original_size)} → {formatBytes(result.total_compressed_size)}
+            </p>
+            <p className="mt-0.5 text-[12px] text-ink-faint tabular-nums">
+              {formatDuration(durationMs)}
+              {saved > 0 && <> · {t("protected.smaller", { pct: saved })}</>}
+            </p>
             {mostlyCompressed && (
               <p className="mt-2 text-[12px] text-ink-soft leading-relaxed">{t("protected.alreadyCompressed")}</p>
             )}

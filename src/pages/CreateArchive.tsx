@@ -13,6 +13,7 @@ import { Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../componen
 import sealAction from "../assets/seal-action.png";
 import { useT } from "../i18n";
 import { mapError } from "../lib/errors";
+import { classifyCompressibility } from "../lib/extensions";
 import type {
   CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
 } from "../types";
@@ -176,6 +177,14 @@ export default function CreateArchive({
               </div>
             </div>
             {error && <p className="text-[13px] text-wax leading-relaxed">{error}</p>}
+            {!error && files.length > 0 && (
+              /* Compression honesty hint (Phase 4) — mirrors the Rust heuristics */
+              (() => {
+                const c = classifyCompressibility(files);
+                if (c === "compressible") return null;
+                return <p className="text-[12px] text-ink-faint">{t(`progress.${c}`)}</p>;
+              })()
+            )}
           </div>
         </div>
 

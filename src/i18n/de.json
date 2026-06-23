@@ -163,9 +163,16 @@
     "remove": "Aus Liste entfernen"
   },
   "progress": {
-    "scanning": "Dateien werden geprüft",
-    "compressing": "Komprimieren & Verschlüsseln",
-    "writing": "Archiv wird geschrieben",
-    "finalizing": "Abschluss"
+    "scanning": "Dateien werden durchgesehen…",
+    "compressing": "Dateien werden gepackt und geschützt…",
+    "writing": "Versiegeltes Archiv wird geschrieben…",
+    "finalizing": "Tresor wird versiegelt…",
+    "remaining": "verbleibend",
+    "calculating": "Zeit wird berechnet…",
+    "stuckWorking": "Arbeitet noch…",
+    "stuckLarge": "Große Dateien werden verarbeitet…",
+    "incompressible": "Bereits komprimiert — kaum Größenreduktion zu erwarten",
+    "media": "Die meisten Dateien sind bereits komprimiert (Bilder / Video / Archive).",
+    "mixed": "Eine Mischung aus komprimierbaren und bereits komprimierten Dateien."
   }
 }

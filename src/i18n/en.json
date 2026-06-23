@@ -163,9 +163,16 @@
     "remove": "Remove from list"
   },
   "progress": {
-    "scanning": "Scanning files",
-    "compressing": "Compressing & encrypting",
-    "writing": "Writing archive",
-    "finalizing": "Finalizing"
+    "scanning": "Looking through your files…",
+    "compressing": "Packing and protecting your files…",
+    "writing": "Writing the sealed archive…",
+    "finalizing": "Sealing the vault…",
+    "remaining": "remaining",
+    "calculating": "Calculating time…",
+    "stuckWorking": "Still working…",
+    "stuckLarge": "Working through large files…",
+    "incompressible": "Already compressed — minimal size reduction expected",
+    "media": "Most files are already compressed (images / video / archives).",
+    "mixed": "A mix of compressible and already-compressed files."
   }
 }

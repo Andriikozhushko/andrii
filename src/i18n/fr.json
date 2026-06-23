@@ -163,9 +163,16 @@
     "remove": "Retirer de la liste"
   },
   "progress": {
-    "scanning": "Analyse des fichiers",
-    "compressing": "Compression et chiffrement",
-    "writing": "Écriture de l’archive",
-    "finalizing": "Finalisation"
+    "scanning": "Analyse de vos fichiers…",
+    "compressing": "Compression et protection de vos fichiers…",
+    "writing": "Écriture de l’archive scellée…",
+    "finalizing": "Scellement du coffre…",
+    "remaining": "restant",
+    "calculating": "Calcul du temps…",
+    "stuckWorking": "Toujours en cours…",
+    "stuckLarge": "Traitement de fichiers volumineux…",
+    "incompressible": "Déjà compressé — réduction de taille minime attendue",
+    "media": "La plupart des fichiers sont déjà compressés (images / vidéo / archives).",
+    "mixed": "Un mélange de fichiers compressibles et déjà compressés."
   }
 }
