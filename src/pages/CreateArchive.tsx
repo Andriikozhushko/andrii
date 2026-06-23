@@ -1,26 +1,29 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { stat } from "@tauri-apps/plugin-fs";
-import { Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import PasswordStrength from "../components/PasswordStrength";
-import Vault, { VaultScene } from "../components/Vault";
+import PasswordGenerator from "../components/PasswordGenerator";
+import Vault from "../components/Vault";
+import FileTable, { type FileItem } from "../components/FileTable";
+import ArchiveProgress from "../components/ArchiveProgress";
 import { Keyhole, InkAddFiles, InkFolder, InkStamp, InkQuill } from "../components/art";
+import sealAction from "../assets/seal-action.png";
 import { useT } from "../i18n";
 import { mapError } from "../lib/errors";
 import type {
-  CreateArchiveResponse, PasswordStrengthResult, CompressionLevel,
+  CreateArchiveResponse, PasswordStrengthResult, CompressionLevel, ProgressEvent,
 } from "../types";
 
 interface CreateArchiveProps {
   files: string[];
   isDragging: boolean;
   onFilesChange: (files: string[]) => void;
-  onCreated: (result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel) => void;
+  onCreated: (result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel, durationMs: number) => void;
   onClear: () => void;
 }
-
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function formatBytes(b: number): string {
   if (b < 1024)       return `${b} B`;
@@ -32,18 +35,6 @@ function basename(p: string) { return p.replace(/\\/g, "/").split("/").pop() ?? 
 
 interface FileMeta { size: number; isDir: boolean; }
 
-/* a quiet, secondary chip — the things gathered in the vault (not a card grid) */
-function Chip({ name, onRemove }: { name: string; onRemove: () => void }) {
-  return (
-    <span className="group inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full border border-border-strong bg-surface text-[12px] text-ink max-w-[200px]">
-      <span className="truncate">{name}</span>
-      <button onClick={onRemove} className="w-4 h-4 flex items-center justify-center rounded-full text-ink-faint hover:text-wax hover:bg-wax/10">
-        <X size={11} />
-      </button>
-    </span>
-  );
-}
-
 export default function CreateArchive({
   files, isDragging, onFilesChange, onCreated, onClear,
 }: CreateArchiveProps) {
@@ -52,9 +43,11 @@ export default function CreateArchive({
   const [name, setName]           = useState("");
   const [password, setPassword]   = useState("");
   const [showPw, setShowPw]       = useState(false);
+  const [showGen, setShowGen]     = useState(false);
   const [compression]             = useState<CompressionLevel>("Balanced");
   const [analysis, setAnalysis]   = useState<PasswordStrengthResult | null>(null);
   const [creating, setCreating]   = useState(false);
+  const [progress, setProgress]   = useState<ProgressEvent | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [fileMetas, setFileMetas] = useState<Record<string, FileMeta>>({});
 
@@ -95,6 +88,14 @@ export default function CreateArchive({
     onFilesChange(files.filter(f => f !== path));
   }, [files, onFilesChange]);
 
+  // Live progress while sealing.
+  useEffect(() => {
+    if (!creating) return;
+    let un: (() => void) | undefined;
+    listen<ProgressEvent>("archive-progress", e => setProgress(e.payload)).then(f => { un = f; });
+    return () => { un?.(); };
+  }, [creating]);
+
   const handleSeal = async () => {
     if (!canSeal) return;
     const outputPath = await save({
@@ -104,22 +105,23 @@ export default function CreateArchive({
     if (!outputPath) return;
 
     setCreating(true);
+    setProgress(null);
     setError(null);
+    const start = Date.now();
     try {
       const res = await invoke<CreateArchiveResponse>("create_archive", {
         request: { file_paths: files, output_path: outputPath, archive_name: name.trim(), password, compression },
       });
-      await sleep(600);
-      onCreated(res, analysis, compression);
+      onCreated(res, analysis, compression, Date.now() - start);
     } catch (e) {
       setError(mapError(String(e), t));
       setCreating(false);
     }
   };
 
-  /* ── Sealing — the vault simply closes. Silent; the object is the truth. ── */
+  /* ── Sealing — one calm, real progress bar ── */
   if (creating) {
-    return <VaultScene state="sealed" size={176} />;
+    return <ArchiveProgress progress={progress} />;
   }
 
   /* ── Configuration — name the vault, set the key ── */
@@ -127,7 +129,7 @@ export default function CreateArchive({
     return (
       <div className="canvas animate-fade-in">
         <div className="canvas-center px-10 gap-6">
-          <Vault state="filling" size={156} />
+          <Vault state="sealed" size={156} src={sealAction} />
           <div className="text-center">
             <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">{t("create.seal")}</h2>
             <button onClick={() => setStep("files")} className="text-[13px] text-ink-faint hover:text-accent-text transition-colors mt-1">
@@ -144,7 +146,13 @@ export default function CreateArchive({
                 value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSeal()} />
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-ink-soft mb-1">{t("create.password")}</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[12px] font-semibold text-ink-soft">{t("create.password")}</label>
+                <button type="button" onClick={() => setShowGen(v => !v)}
+                  className="text-[12px] text-accent-text hover:underline">
+                  {t("generator.title")}
+                </button>
+              </div>
               <div className="relative">
                 <span className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-70"><Keyhole size={18} /></span>
                 <input type={showPw ? "text" : "password"} className="input pl-7 pr-10"
@@ -156,6 +164,11 @@ export default function CreateArchive({
                   {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
+              {showGen && (
+                <div className="mt-2.5">
+                  <PasswordGenerator onUse={pw => { setPassword(pw); setShowGen(false); setShowPw(true); }} />
+                </div>
+              )}
               <div className="mt-2.5">
                 {password
                   ? <PasswordStrength password={password} onResult={setAnalysis} />
@@ -174,28 +187,34 @@ export default function CreateArchive({
     );
   }
 
-  /* ── Files gathered in the vault ── */
+  /* ── Files gathered in the vault — same browser UI as Open ── */
+  const items: FileItem[] = files.map(path => ({
+    key: path,
+    name: basename(path),
+    sub: path,
+    size: fileMetas[path]?.size ?? 0,
+    isDir: fileMetas[path]?.isDir ?? false,
+  }));
+
   return (
     <div className={`canvas animate-fade-in ${isDragging ? "ring-2 ring-inset ring-accent/40" : ""}`}>
-      <div className="canvas-center px-10 gap-6">
-        <Vault state="filling" size={176} />
-        <div className="text-center space-y-1">
-          <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">
+      {/* header — small vault + tally + add actions (mirrors the Open details bar) */}
+      <div className="flex items-center gap-3 px-8 py-3 border-b border-border shrink-0">
+        <span className="shrink-0"><Vault state="filling" size={42} /></span>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-[20px] font-semibold tracking-tight text-ink leading-tight">
             {t("create.ready", { count: files.length, files: fileWord })}
-            {totalSize > 0 && <span className="text-ink-faint font-sans font-normal text-[20px]"> · {formatBytes(totalSize)}</span>}
+            {totalSize > 0 && <span className="text-ink-faint font-sans font-normal text-[16px]"> · {formatBytes(totalSize)}</span>}
           </h2>
-          <p className="text-[13px] text-ink-soft">{t("create.intent")}</p>
+          <p className="text-[12px] text-ink-soft truncate">{t("create.intent")}</p>
         </div>
-
-        <div className="flex flex-wrap justify-center gap-2 max-w-lg max-h-28 overflow-y-auto">
-          {files.map(path => <Chip key={path} name={basename(path)} onRemove={() => removeFile(path)} />)}
-        </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button onClick={addFiles} className="btn-ghost text-xs"><InkAddFiles size={14} /> {t("create.addFiles")}</button>
           <button onClick={addFolder} className="btn-ghost text-xs"><InkFolder size={14} /> {t("create.addFolder")}</button>
         </div>
       </div>
+
+      <FileTable items={items} onRemove={removeFile} />
 
       <div className="bottom-bar">
         <button onClick={onClear} className="btn-ghost text-sm">{t("common.clear")}</button>

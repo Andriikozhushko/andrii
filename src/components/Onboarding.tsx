@@ -1,6 +1,8 @@
 import { useT } from "../i18n";
 import { setOnboarded } from "../lib/storage";
 import Vault from "./Vault";
+import chestOpen from "../assets/chest-open.png";
+import crateParchment from "../assets/crate-parchment.png";
 
 /** First-run welcome — three steps, then "Get started". */
 export default function Onboarding({ onDone }: { onDone: () => void }) {
@@ -8,9 +10,9 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
   const finish = () => { setOnboarded(true); onDone(); };
 
   const steps = [
-    { art: <Vault state="idle" size={66} />,   title: t("onboarding.step1Title"), desc: t("onboarding.step1Desc") },
-    { art: <Vault state="sealed" size={66} />, title: t("onboarding.step2Title"), desc: t("onboarding.step2Desc") },
-    { art: <Vault state="opened" size={66} />, title: t("onboarding.step3Title"), desc: t("onboarding.step3Desc") },
+    { art: <Vault state="idle" size={66} />,                      title: t("onboarding.step1Title"), desc: t("onboarding.step1Desc") },
+    { art: <Vault state="opened" size={66} src={chestOpen} />,    title: t("onboarding.step2Title"), desc: t("onboarding.step2Desc") },
+    { art: <Vault state="filling" size={66} src={crateParchment} />, title: t("onboarding.step3Title"), desc: t("onboarding.step3Desc") },
   ];
 
   return (

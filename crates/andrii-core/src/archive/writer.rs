@@ -1,23 +1,59 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use zeroize::Zeroizing;
 
-use andrii_compress::{compress, CompressionLevel};
+use andrii_compress::{compress, decide_level, CompressionLevel};
 use andrii_crypto::{
     cipher::{encrypt, generate_nonce},
-    hash::{hash_bytes, hash_to_hex},
+    hash::hash_to_hex,
     kdf::{derive_key, generate_salt, KdfParams},
 };
 
 use crate::error::ArchiveError;
 use crate::format::{
     entry::FileEntry,
-    header::{Argon2ParamsJson, EncryptedHeader, FixedHeader, Footer, FORMAT_VERSION},
+    header::{Argon2ParamsJson, EncryptedHeader, FixedHeader, Footer, CHUNK_SIZE, FORMAT_VERSION},
 };
+
+/// Stage of archive creation, reported through the progress callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// Walking input paths and tallying totals.
+    Scanning,
+    /// Reading, compressing and encrypting file content (the dominant stage).
+    Compressing,
+    /// Streaming sealed blocks into the final archive while hashing.
+    Writing,
+    /// Writing the footer and atomically committing the archive.
+    Finalizing,
+}
+
+impl Phase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Phase::Scanning => "scanning",
+            Phase::Compressing => "compressing",
+            Phase::Writing => "writing",
+            Phase::Finalizing => "finalizing",
+        }
+    }
+}
+
+/// A snapshot of creation progress passed to the progress callback.
+#[derive(Debug, Clone)]
+pub struct Progress<'a> {
+    pub phase: Phase,
+    pub files_done: u64,
+    pub files_total: u64,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    /// Archive-relative path of the file currently being processed (may be empty).
+    pub current_file: &'a str,
+}
 
 /// Options for creating a new archive.
 pub struct CreateArchiveOptions {
@@ -25,12 +61,14 @@ pub struct CreateArchiveOptions {
     pub archive_name: String,
     /// Password to encrypt the archive with.
     pub password: String,
-    /// Compression level.
+    /// Compression level (user-selected mode). Per-file the effective level may be
+    /// downgraded to `None` for already-compressed data — see [`decide_level`].
     pub compression: CompressionLevel,
     /// Output file path (should end in .andrii).
     pub output_path: PathBuf,
-    /// Optional progress callback: (current_file_index, total_files, current_file_name).
-    pub progress_callback: Option<Box<dyn Fn(u64, u64, &str) + Send>>,
+    /// Optional progress callback. Called frequently (per chunk); the caller is
+    /// responsible for throttling UI updates.
+    pub progress_callback: Option<Box<dyn Fn(&Progress) + Send>>,
 }
 
 /// Result of archive creation.
@@ -48,31 +86,57 @@ pub struct ArchiveWriter {
     options: CreateArchiveOptions,
 }
 
+/// Whether `ANDRII_PROFILE` is set — gates stderr timing output. Read once.
+fn profiling_enabled() -> bool {
+    std::env::var_os("ANDRII_PROFILE").is_some()
+}
+
 impl ArchiveWriter {
     pub fn new(options: CreateArchiveOptions) -> Self {
         Self { options }
     }
 
-    /// Create the archive from a list of file/directory paths.
+    fn emit(&self, p: &Progress) {
+        if let Some(cb) = &self.options.progress_callback {
+            cb(p);
+        }
+    }
+
+    /// Create the archive (format v2: per-file chunked streaming).
     ///
-    /// Directories are recursively walked. Symlinks are skipped.
+    /// Directories are recursively walked. Symlinks are skipped. Peak memory stays
+    /// at roughly one [`CHUNK_SIZE`] chunk regardless of individual file size.
     pub fn create(&self, input_paths: &[PathBuf]) -> Result<CreateArchiveResult, ArchiveError> {
-        // Collect all files to archive
+        let profile = profiling_enabled();
+        let t_total = Instant::now();
+
+        // ── Scan ────────────────────────────────────────────────────────────
+        let t_scan = Instant::now();
         let files = collect_files(input_paths)?;
-        // Fail-closed: never create an empty vault.
         if files.is_empty() {
             return Err(ArchiveError::Format("No files to add to the vault".to_string()));
         }
         let total_original_size: u64 = files.iter().map(|(_, meta)| meta.0).sum();
+        let files_total = files.len() as u64;
+        let dt_scan = t_scan.elapsed();
+        self.emit(&Progress {
+            phase: Phase::Scanning,
+            files_done: 0,
+            files_total,
+            bytes_done: 0,
+            bytes_total: total_original_size,
+            current_file: "",
+        });
 
-        // Derive master key
+        // ── Derive master key ───────────────────────────────────────────────
+        let t_kdf = Instant::now();
         let kdf_params = KdfParams::default();
         let salt = generate_salt()?;
         let master_key: Zeroizing<[u8; 32]> =
             derive_key(&self.options.password, &salt, &kdf_params)?;
+        let dt_kdf = t_kdf.elapsed();
 
-        // Destination dir + a unique stamp for temp files, kept on the same volume
-        // as the output so the final rename is atomic.
+        // Temp files kept on the same volume as the output for an atomic rename.
         let output_path = self.options.output_path.clone();
         let dir = output_path
             .parent()
@@ -87,68 +151,133 @@ impl ArchiveWriter {
         let spool_path = dir.join(format!(".andrii-spool-{stamp}.tmp"));
         let tmp_path = dir.join(format!(".andrii-build-{stamp}.tmp"));
 
-        // Encrypted blocks are spooled to a temp file so peak memory stays ~one
-        // file, not the whole archive.
-        let mut spool = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(&spool_path)?;
+        let mut spool = BufWriter::new(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(&spool_path)?,
+        );
         let mut entries: Vec<FileEntry> = Vec::with_capacity(files.len());
         let mut current_data_offset: u64 = 0;
+        let mut bytes_done: u64 = 0;
 
-        for (idx, (archive_path, (original_size, fs_path, modified_at, unix_mode))) in
-            files.iter().enumerate()
-        {
-            if let Some(cb) = &self.options.progress_callback {
-                cb(idx as u64, files.len() as u64, archive_path);
+        // ── Per-file chunked seal ───────────────────────────────────────────
+        let t_seal = Instant::now();
+        let seal_result = (|| -> Result<(), ArchiveError> {
+            for (idx, (archive_path, (original_size, fs_path, modified_at, unix_mode))) in
+                files.iter().enumerate()
+            {
+                self.emit(&Progress {
+                    phase: Phase::Compressing,
+                    files_done: idx as u64,
+                    files_total,
+                    bytes_done,
+                    bytes_total: total_original_size,
+                    current_file: archive_path,
+                });
+
+                let mut reader = BufReader::new(File::open(fs_path)?);
+
+                // Read the first chunk to decide the effective compression level.
+                let mut current = read_chunk(&mut reader)?;
+                let level = decide_level(archive_path, &current, self.options.compression);
+                let stored_raw = level == CompressionLevel::None;
+
+                // Per-file 16-byte base nonce; per-chunk nonce = base ‖ counter.
+                let nonce24 = generate_nonce()?;
+                let mut base16 = [0u8; 16];
+                base16.copy_from_slice(&nonce24[..16]);
+                let nonce_b64 = URL_SAFE_NO_PAD.encode(base16);
+
+                let mut hasher = blake3::Hasher::new();
+                let mut chunk_index: u64 = 0;
+                let mut region_size: u64 = 0;
+                let mut compressed_payload: u64 = 0;
+
+                // Empty file → zero chunks; its BLAKE3 is the hash of no bytes.
+                while !current.is_empty() {
+                    let next = read_chunk(&mut reader)?;
+                    let is_last = next.is_empty();
+
+                    hasher.update(&current);
+
+                    // nonce = base16 ‖ chunk_index(BE u64); AAD binds order + truncation.
+                    let mut nonce = [0u8; 24];
+                    nonce[..16].copy_from_slice(&base16);
+                    nonce[16..24].copy_from_slice(&chunk_index.to_be_bytes());
+                    let mut aad = [0u8; 9];
+                    aad[..8].copy_from_slice(&chunk_index.to_be_bytes());
+                    aad[8] = is_last as u8;
+
+                    let (sealed, payload_len) = if stored_raw {
+                        (encrypt(&master_key, &nonce, &current, &aad)?, current.len())
+                    } else {
+                        let comp = Zeroizing::new(compress(&current, level)?);
+                        let len = comp.len();
+                        (encrypt(&master_key, &nonce, &comp, &aad)?, len)
+                    };
+                    compressed_payload += payload_len as u64;
+
+                    spool.write_all(&(sealed.len() as u32).to_le_bytes())?;
+                    spool.write_all(&sealed)?;
+                    region_size += 4 + sealed.len() as u64;
+
+                    bytes_done += current.len() as u64;
+                    chunk_index += 1;
+                    self.emit(&Progress {
+                        phase: Phase::Compressing,
+                        files_done: idx as u64,
+                        files_total,
+                        bytes_done,
+                        bytes_total: total_original_size,
+                        current_file: archive_path,
+                    });
+
+                    if is_last {
+                        break;
+                    }
+                    current = next;
+                }
+
+                let blake3_hex = hash_to_hex(hasher.finalize().as_bytes());
+
+                entries.push(FileEntry {
+                    path: archive_path.clone(),
+                    original_size: *original_size,
+                    compressed_encrypted_size: region_size,
+                    content_nonce: nonce_b64,
+                    data_offset: current_data_offset,
+                    blake3_hash: blake3_hex,
+                    modified_at: *modified_at,
+                    unix_mode: *unix_mode,
+                    chunk_count: chunk_index,
+                    stored_raw,
+                    compressed_size: compressed_payload,
+                });
+                current_data_offset += region_size;
             }
+            Ok(())
+        })();
 
-            // Read file content (plaintext zeroized on drop)
-            let content = Zeroizing::new(fs::read(fs_path)?);
-
-            // Compute BLAKE3 hash of original content
-            let blake3_hash = hash_bytes(&content);
-            let blake3_hex = hash_to_hex(&blake3_hash);
-
-            // Compress (plaintext zeroized on drop)
-            let compressed = Zeroizing::new(compress(&content, self.options.compression)?);
-
-            // Generate per-file nonce
-            let content_nonce = generate_nonce()?;
-            let nonce_b64 = URL_SAFE_NO_PAD.encode(content_nonce);
-
-            // Encrypt with AAD = blake3_hash (binds content to its metadata)
-            let encrypted = encrypt(&master_key, &content_nonce, &compressed, &blake3_hash)?;
-
-            let compressed_encrypted_size = encrypted.len() as u64;
-
-            entries.push(FileEntry {
-                path: archive_path.clone(),
-                original_size: *original_size,
-                compressed_encrypted_size,
-                content_nonce: nonce_b64,
-                data_offset: current_data_offset,
-                blake3_hash: blake3_hex,
-                modified_at: *modified_at,
-                unix_mode: *unix_mode,
-            });
-
-            current_data_offset += compressed_encrypted_size;
-            spool.write_all(&encrypted)?;
+        if let Err(e) = seal_result {
+            drop(spool);
+            let _ = fs::remove_file(&spool_path);
+            return Err(e);
         }
+        spool.flush()?;
+        let mut spool = spool.into_inner().map_err(|e| ArchiveError::Io(e.into_error()))?;
+        let dt_seal = t_seal.elapsed();
 
-        let total_compressed_size: u64 =
-            entries.iter().map(|e| e.compressed_encrypted_size).sum();
+        let total_compressed_size: u64 = entries.iter().map(|e| e.compressed_size).sum();
         let file_count = entries.len();
-
         let compression_ratio = if total_original_size > 0 {
             1.0 - (total_compressed_size as f64 / total_original_size as f64)
         } else {
             0.0
         };
 
-        // Build encrypted header
+        // ── Build encrypted header ──────────────────────────────────────────
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -169,13 +298,7 @@ impl ArchiveWriter {
         };
 
         let header_json = enc_header.to_json()?;
-
-        // Encrypt the header
         let header_nonce = generate_nonce()?;
-
-        // The encrypted header length = plaintext_len + 16 (AEAD tag).
-        // This is known before encryption, so we can build the fixed header first.
-        // The fixed header bytes then serve as AAD for header encryption.
         let enc_header_len = (header_json.len() + 16) as u64;
 
         let fixed_header = FixedHeader {
@@ -186,13 +309,19 @@ impl ArchiveWriter {
             enc_header_len,
         };
         let fixed_header_bytes = fixed_header.to_bytes();
-
         let encrypted_header =
             encrypt(&master_key, &header_nonce, &header_json, &fixed_header_bytes)?;
 
-        // Assemble into a temp file in the destination dir, hashing as we go. A
-        // crash mid-write never touches the target — the original (if any) stays
-        // intact until the atomic rename below.
+        // ── Assemble + hash ─────────────────────────────────────────────────
+        self.emit(&Progress {
+            phase: Phase::Writing,
+            files_done: files_total,
+            files_total,
+            bytes_done: total_original_size,
+            bytes_total: total_original_size,
+            current_file: "",
+        });
+        let t_asm = Instant::now();
         let build = (|| -> Result<(), ArchiveError> {
             let final_file = File::create(&tmp_path)?;
             let mut writer = BufWriter::new(final_file);
@@ -203,9 +332,8 @@ impl ArchiveWriter {
             writer.write_all(&encrypted_header)?;
             hasher.update(&encrypted_header);
 
-            // Stream the spooled encrypted blocks back in, hashing as we go.
             spool.seek(SeekFrom::Start(0))?;
-            let mut buf = vec![0u8; 1 << 20];
+            let mut buf = vec![0u8; CHUNK_SIZE];
             loop {
                 let n = spool.read(&mut buf)?;
                 if n == 0 {
@@ -215,6 +343,14 @@ impl ArchiveWriter {
                 hasher.update(&buf[..n]);
             }
 
+            self.emit(&Progress {
+                phase: Phase::Finalizing,
+                files_done: files_total,
+                files_total,
+                bytes_done: total_original_size,
+                bytes_total: total_original_size,
+                current_file: "",
+            });
             let archive_hash = *hasher.finalize().as_bytes();
             let footer = Footer::new(archive_hash);
             writer.write_all(&footer.to_bytes())?;
@@ -222,7 +358,6 @@ impl ArchiveWriter {
             Ok(())
         })();
 
-        // Spool is no longer needed (close before removing on Windows).
         drop(spool);
         let _ = fs::remove_file(&spool_path);
 
@@ -230,11 +365,22 @@ impl ArchiveWriter {
             let _ = fs::remove_file(&tmp_path);
             return Err(e);
         }
+        let dt_asm = t_asm.elapsed();
 
-        // Atomic commit: rename replaces any existing target on Windows & Unix.
+        // ── Atomic commit ───────────────────────────────────────────────────
+        let t_rename = Instant::now();
         if let Err(e) = fs::rename(&tmp_path, &output_path) {
             let _ = fs::remove_file(&tmp_path);
             return Err(ArchiveError::Io(e));
+        }
+        let dt_rename = t_rename.elapsed();
+
+        if profile {
+            eprintln!(
+                "[andrii-profile] create: total={:?} scan={:?} kdf={:?} seal={:?} assemble={:?} rename={:?} | files={} orig={}B stored={}B ratio={:.1}%",
+                t_total.elapsed(), dt_scan, dt_kdf, dt_seal, dt_asm, dt_rename,
+                file_count, total_original_size, total_compressed_size, compression_ratio * 100.0,
+            );
         }
 
         Ok(CreateArchiveResult {
@@ -245,6 +391,22 @@ impl ArchiveWriter {
             compression_ratio,
         })
     }
+}
+
+/// Read up to `CHUNK_SIZE` bytes, returning fewer only at EOF. Plaintext is
+/// zeroized on drop.
+fn read_chunk<R: Read>(reader: &mut R) -> Result<Zeroizing<Vec<u8>>, ArchiveError> {
+    let mut buf = vec![0u8; CHUNK_SIZE];
+    let mut filled = 0;
+    while filled < CHUNK_SIZE {
+        let n = reader.read(&mut buf[filled..])?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    buf.truncate(filled);
+    Ok(Zeroizing::new(buf))
 }
 
 /// (archive_relative_path, (original_size, fs_path, modified_at, unix_mode))

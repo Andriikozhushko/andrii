@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide the WebView2/Edge native password reveal + clear glyphs — we render our
+   own eye toggle, so the native one would show a second, duplicate icon. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* ── ANDRII 01F — Hand-Drawn Vault · parchment + ink ───────────────────────── */
 :root {
   /* parchment surfaces */

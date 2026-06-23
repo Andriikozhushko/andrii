@@ -75,6 +75,62 @@ pub fn should_compress(data: &[u8]) -> bool {
     (compressed.len() as f64 / sample.len() as f64) < 0.95
 }
 
+/// File extensions that are already compressed; trying to zstd them wastes time
+/// for ~0% gain. Matched case-insensitively against the path's extension.
+const INCOMPRESSIBLE_EXTS: &[&str] = &[
+    // images
+    "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif",
+    // video
+    "mp4", "m4v", "mov", "mkv", "avi", "webm", "wmv", "flv",
+    // audio
+    "mp3", "aac", "ogg", "oga", "opus", "flac", "m4a", "wma",
+    // archives / already-compressed containers
+    "zip", "7z", "rar", "gz", "tgz", "bz2", "xz", "zst", "lz4", "br", "cab",
+    // documents that embed compression
+    "pdf", "docx", "xlsx", "pptx", "odt", "ods", "odp", "epub",
+    // packages / binaries
+    "jar", "apk", "ipa", "dmg", "exe", "msi", "appimage", "crx", "nupkg",
+];
+
+/// Heuristic: is this file most likely already compressed, judging only by its
+/// path extension? Used to skip pointless zstd work entirely.
+pub fn is_probably_incompressible(path: &str) -> bool {
+    let ext = path
+        .rsplit(['/', '\\'])
+        .next()
+        .and_then(|name| name.rsplit('.').next().filter(|e| !e.is_empty() && *e != name))
+        .map(|e| e.to_ascii_lowercase());
+    match ext {
+        Some(e) => INCOMPRESSIBLE_EXTS.contains(&e.as_str()),
+        None => false,
+    }
+}
+
+/// Decide the effective per-file compression level given the user-selected
+/// `mode`, the file's path, and a sample of its leading bytes.
+///
+/// Returns [`CompressionLevel::None`] (store raw) when compression is unlikely
+/// to help, so already-compressed media doesn't burn CPU for ~0% gain. This is
+/// what makes Fast/Balanced/Maximum behave meaningfully differently:
+/// - `Fast`     — skip known-compressed extensions, otherwise level 1 (no sampling).
+/// - `Balanced` — skip known-compressed extensions, then an entropy sample, else level 6.
+/// - `Maximum`  — same skipping, else level 19 (only text/code/docs really shrink).
+pub fn decide_level(path: &str, sample: &[u8], mode: CompressionLevel) -> CompressionLevel {
+    if mode == CompressionLevel::None {
+        return CompressionLevel::None;
+    }
+    if is_probably_incompressible(path) {
+        return CompressionLevel::None;
+    }
+    match mode {
+        CompressionLevel::Fast => CompressionLevel::Fast,
+        CompressionLevel::Balanced | CompressionLevel::Maximum => {
+            if should_compress(sample) { mode } else { CompressionLevel::None }
+        }
+        CompressionLevel::None => CompressionLevel::None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +164,46 @@ mod tests {
         let compressed = compress(&[], CompressionLevel::Balanced).unwrap();
         let decompressed = decompress(&compressed, Some(0)).unwrap();
         assert!(decompressed.is_empty());
+    }
+
+    #[test]
+    fn test_incompressible_extensions() {
+        assert!(is_probably_incompressible("photo.JPG"));
+        assert!(is_probably_incompressible("dir/sub/movie.mp4"));
+        assert!(is_probably_incompressible(r"C:\path\archive.zip"));
+        assert!(!is_probably_incompressible("notes.txt"));
+        assert!(!is_probably_incompressible("src/main.rs"));
+        assert!(!is_probably_incompressible("README")); // no extension
+    }
+
+    #[test]
+    fn test_decide_level_skips_media() {
+        // Known-compressed extension → raw regardless of mode.
+        let sample = vec![0u8; 4096];
+        for mode in [CompressionLevel::Fast, CompressionLevel::Balanced, CompressionLevel::Maximum] {
+            assert_eq!(decide_level("clip.mp4", &sample, mode), CompressionLevel::None);
+        }
+    }
+
+    #[test]
+    fn test_decide_level_compresses_text() {
+        let text = b"the quick brown fox ".repeat(500); // highly compressible
+        assert_eq!(decide_level("a.txt", &text, CompressionLevel::Fast), CompressionLevel::Fast);
+        assert_eq!(decide_level("a.txt", &text, CompressionLevel::Balanced), CompressionLevel::Balanced);
+        assert_eq!(decide_level("a.txt", &text, CompressionLevel::Maximum), CompressionLevel::Maximum);
+    }
+
+    #[test]
+    fn test_decide_level_balanced_skips_high_entropy() {
+        // Unknown extension but high-entropy content → Balanced/Maximum store raw.
+        let mut data = vec![0u8; 8192];
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        for b in data.iter_mut() {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            *b = (x >> 24) as u8;
+        }
+        assert_eq!(decide_level("blob.bin", &data, CompressionLevel::Balanced), CompressionLevel::None);
     }
 }

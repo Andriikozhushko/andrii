@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Archive, FolderOpen, ShieldCheck, ArrowRight } from "lucide-react";
 import type { Screen } from "../types";
+import archiveBox from "../assets/archive-box.png";
 
 interface HomeProps {
   onNavigate: (s: Screen) => void;
@@ -79,9 +80,12 @@ export default function Home({ onNavigate, onNavigateWithFiles }: HomeProps) {
       {/* Hero */}
       <div className="text-center mb-10 animate-slide-up">
         <div className="flex justify-center mb-5">
-          <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center shadow-glow">
-            <ShieldCheck size={32} className="text-accent" />
-          </div>
+          <img
+            src={archiveBox}
+            alt=""
+            draggable={false}
+            className="w-32 h-32 object-contain select-none drop-shadow-[0_8px_24px_rgba(178,58,53,0.25)]"
+          />
         </div>
         <h1 className="text-3xl font-bold text-text-primary tracking-tight mb-2">
           ANDRII

@@ -103,7 +103,8 @@
     "sealAnother": "Sceller une autre",
     "inside": "{count} {files}",
     "smaller": "{pct}% plus petit",
-    "footnote": "Chiffré et scellé localement sur votre appareil."
+    "footnote": "Chiffré et scellé localement sur votre appareil.",
+    "alreadyCompressed": "La plupart des fichiers étaient déjà compressés, l’espace gagné est donc minime."
   },
   "strength": {
     "veryWeak": "Très faible",
@@ -160,5 +161,11 @@
     "title": "Archives récentes",
     "empty": "Les archives scellées et ouvertes apparaîtront ici.",
     "remove": "Retirer de la liste"
+  },
+  "progress": {
+    "scanning": "Analyse des fichiers",
+    "compressing": "Compression et chiffrement",
+    "writing": "Écriture de l’archive",
+    "finalizing": "Finalisation"
   }
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Vault from "../components/Vault";
 import { InkLens } from "../components/art";
+import sealIntact from "../assets/seal-intact.png";
 import { useT } from "../i18n";
 import { recordVerified } from "../lib/storage";
 import { mapError } from "../lib/errors";
@@ -64,7 +65,7 @@ export default function VerifyArchive({ archivePath, onBack }: VerifyArchiveProp
         ) : verdict ? (
           <div className="flex flex-col items-center gap-6 animate-fade-in">
             {verdict.kind === "intact"
-              ? <Vault state="sealed" tone="safe" size={156} />
+              ? <Vault state="sealed" tone="safe" size={156} src={sealIntact} />
               : <Vault state="broken" size={156} />}
 
             <div className="text-center space-y-2">

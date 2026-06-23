@@ -299,7 +299,7 @@ fn verify_valid_archive_passes() {
     assert!(result.integrity_hash_valid);
     assert!(result.has_valid_magic);
     assert!(result.version_supported);
-    assert_eq!(result.format_version, 1);
+    assert_eq!(result.format_version, 2);
 }
 
 // ── 8. Detect tampered archive ───────────────────────────────────────────────
@@ -457,8 +457,8 @@ fn verify_rejects_unsupported_version() {
 
     let err = verify_archive(&archive).unwrap_err();
     assert!(
-        matches!(err, ArchiveError::UnsupportedVersion(255, 1)),
-        "expected UnsupportedVersion(255, 1), got: {err:?}"
+        matches!(err, ArchiveError::UnsupportedVersion(255, 2)),
+        "expected UnsupportedVersion(255, 2), got: {err:?}"
     );
 }
 
@@ -699,4 +699,152 @@ fn file_entries_have_correct_sizes() {
 
     assert_eq!(entry.original_size, original_size);
     assert_eq!(entry.path, "hello.txt");
+}
+
+// ── Performance / progress / streaming acceptance (v2) ─────────────────────────
+
+/// Fill a buffer with deterministic high-entropy (incompressible) bytes.
+fn fill_random(buf: &mut [u8], mut x: u64) {
+    x |= 1;
+    for b in buf.iter_mut() {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        *b = (x >> 24) as u8;
+    }
+}
+
+#[test]
+fn archive_100_plus_files_roundtrip() {
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("many");
+    fs::create_dir_all(&src).unwrap();
+    let mut files = Vec::new();
+    for i in 0..120 {
+        let p = src.join(format!("f{i:03}.txt"));
+        fs::write(&p, format!("file {i} contents: {}", "data ".repeat(i % 50 + 1))).unwrap();
+        files.push(p);
+    }
+
+    let archive = make_archive(&tmp, "many", &files, "ManyPass!1", CompressionLevel::Balanced);
+    assert!(verify_archive(&archive).unwrap().is_valid);
+
+    let reader = ArchiveReader::open(&archive, "ManyPass!1").unwrap();
+    assert_eq!(reader.info().file_count, 120);
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    assert_eq!(reader.extract_all(&out).unwrap().len(), 120);
+    for (i, f) in files.iter().enumerate() {
+        let got = fs::read(out.join(format!("f{i:03}.txt"))).unwrap();
+        assert_eq!(got, fs::read(f).unwrap(), "mismatch for file {i}");
+    }
+}
+
+#[test]
+fn incompressible_file_stored_raw_not_bloated() {
+    let tmp = TempDir::new().unwrap();
+    let mut data = vec![0u8; 2 * 1024 * 1024];
+    fill_random(&mut data, 0x1234_5678);
+    let jpg = tmp.path().join("photo.jpg");
+    fs::write(&jpg, &data).unwrap();
+
+    // Even at Maximum, a .jpg of random bytes must not waste effort or grow.
+    let archive = make_archive(&tmp, "raw", &[jpg.clone()], "RawPass!1", CompressionLevel::Maximum);
+    let reader = ArchiveReader::open(&archive, "RawPass!1").unwrap();
+    let e = &reader.info().entries[0];
+    assert!(
+        e.compressed_size >= e.original_size && e.compressed_size <= e.original_size + 64,
+        "incompressible data should be stored ~raw: orig={} comp={}",
+        e.original_size, e.compressed_size
+    );
+
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    reader.extract_all(&out).unwrap();
+    assert_eq!(fs::read(out.join("photo.jpg")).unwrap(), data);
+}
+
+#[test]
+fn large_single_file_streams_in_chunks() {
+    // 5 MiB > CHUNK_SIZE (1 MiB) → exercises the multi-chunk streaming path.
+    let tmp = TempDir::new().unwrap();
+    let mut data = vec![0u8; 5 * 1024 * 1024 + 777];
+    fill_random(&mut data, 0xCAFE_BABE);
+    let big = tmp.path().join("big.bin");
+    fs::write(&big, &data).unwrap();
+
+    let archive = make_archive(&tmp, "big", &[big], "BigPass!1", CompressionLevel::Fast);
+    assert!(verify_archive(&archive).unwrap().is_valid);
+    let reader = ArchiveReader::open(&archive, "BigPass!1").unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    reader.extract_all(&out).unwrap();
+    assert_eq!(fs::read(out.join("big.bin")).unwrap(), data);
+}
+
+#[test]
+fn progress_callback_reports_phases_and_bytes() {
+    use std::sync::{Arc, Mutex};
+
+    let tmp = TempDir::new().unwrap();
+    let mut files = Vec::new();
+    let mut total = 0u64;
+    for i in 0..4 {
+        let p = tmp.path().join(format!("p{i}.txt"));
+        let body = format!("payload {}", "x".repeat(50_000 * (i + 1)));
+        total += body.len() as u64;
+        fs::write(&p, &body).unwrap();
+        files.push(p);
+    }
+
+    let log: Arc<Mutex<Vec<(String, u64, u64)>>> = Arc::new(Mutex::new(Vec::new()));
+    let log2 = log.clone();
+    let output = tmp.path().join("prog.andrii");
+    let opts = CreateArchiveOptions {
+        archive_name: "prog".into(),
+        password: "ProgPass!1".into(),
+        compression: CompressionLevel::Balanced,
+        output_path: output.clone(),
+        progress_callback: Some(Box::new(move |p: &andrii_core::Progress| {
+            log2.lock().unwrap().push((p.phase.as_str().to_string(), p.bytes_done, p.bytes_total));
+        })),
+    };
+    ArchiveWriter::new(opts).create(&files).unwrap();
+
+    let events = log.lock().unwrap();
+    assert!(!events.is_empty(), "no progress emitted");
+    // Every phase must appear at least once.
+    for phase in ["scanning", "compressing", "writing", "finalizing"] {
+        assert!(events.iter().any(|(p, _, _)| p == phase), "missing phase {phase}");
+    }
+    // bytes_done is monotonic non-decreasing and totals are consistent.
+    let mut last = 0u64;
+    for (_, done, tot) in events.iter() {
+        assert!(*done >= last, "bytes_done went backwards");
+        last = *done;
+        assert_eq!(*tot, total, "bytes_total mismatch");
+    }
+    assert_eq!(last, total, "final bytes_done must equal total");
+}
+
+#[test]
+fn compression_modes_differ_on_compressible_data() {
+    let tmp = TempDir::new().unwrap();
+    let text = "The quick brown fox jumps over the lazy dog. ".repeat(20_000);
+    let f = tmp.path().join("big.txt");
+    fs::write(&f, &text).unwrap();
+
+    let sizes = |mode: CompressionLevel, name: &str| -> u64 {
+        let a = make_archive(&tmp, name, &[f.clone()], "ModePass!1", mode);
+        let r = ArchiveReader::open(&a, "ModePass!1").unwrap();
+        r.info().entries[0].compressed_size
+    };
+    let fast = sizes(CompressionLevel::Fast, "m_fast");
+    let bal = sizes(CompressionLevel::Balanced, "m_bal");
+    let max = sizes(CompressionLevel::Maximum, "m_max");
+
+    // Higher modes compress text at least as well as lower modes.
+    assert!(max <= bal, "max {max} should be <= balanced {bal}");
+    assert!(bal <= fast, "balanced {bal} should be <= fast {fast}");
+    assert!(max < text.len() as u64, "text should actually shrink");
 }

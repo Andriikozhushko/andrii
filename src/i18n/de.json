@@ -103,7 +103,8 @@
     "sealAnother": "Weiteres versiegeln",
     "inside": "{count} {files}",
     "smaller": "{pct}% kleiner",
-    "footnote": "Lokal auf Ihrem Gerät verschlüsselt und versiegelt."
+    "footnote": "Lokal auf Ihrem Gerät verschlüsselt und versiegelt.",
+    "alreadyCompressed": "Die meisten Dateien waren bereits komprimiert, daher wurde kaum Platz gespart."
   },
   "strength": {
     "veryWeak": "Sehr schwach",
@@ -160,5 +161,11 @@
     "title": "Letzte Archive",
     "empty": "Versiegelte und geöffnete Archive erscheinen hier.",
     "remove": "Aus Liste entfernen"
+  },
+  "progress": {
+    "scanning": "Dateien werden geprüft",
+    "compressing": "Komprimieren & Verschlüsseln",
+    "writing": "Archiv wird geschrieben",
+    "finalizing": "Abschluss"
   }
 }

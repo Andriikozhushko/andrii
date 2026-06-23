@@ -1,0 +1,56 @@
+import Vault from "./Vault";
+import { useT } from "../i18n";
+import type { ProgressEvent } from "../types";
+
+function formatBytes(b: number): string {
+  if (b < 1024)       return `${b} B`;
+  if (b < 1048576)    return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1073741824) return `${(b / 1048576).toFixed(1)} MB`;
+  return `${(b / 1073741824).toFixed(2)} GB`;
+}
+
+/**
+ * One calm progress bar shown while a vault is being sealed. Driven entirely by
+ * real `archive-progress` events — no fake motion, no spinner-only state.
+ */
+export default function ArchiveProgress({ progress }: { progress: ProgressEvent | null }) {
+  const t = useT();
+  const phase = progress?.phase ?? "scanning";
+  const pct = Math.max(0, Math.min(100, progress?.percent ?? 0));
+  const filesTotal = progress?.files_total ?? 0;
+  const filesDone = Math.min(progress?.files_done ?? 0, filesTotal);
+  const fileWord = t(filesTotal === 1 ? "common.file" : "common.files");
+
+  return (
+    <div className="canvas animate-fade-in">
+      <div className="canvas-center px-10 gap-6">
+        <Vault state="unlocking" size={150} />
+
+        <div className="text-center space-y-1">
+          <h2 className="font-serif text-[24px] font-semibold tracking-tight text-ink leading-tight">
+            {t("create.sealing")}
+          </h2>
+          <p className="text-[13px] text-ink-soft">{t(`progress.${phase}`)}</p>
+        </div>
+
+        <div className="w-full max-w-sm space-y-2">
+          <div className="h-2 rounded-full bg-surface-sunken border border-border overflow-hidden">
+            <div
+              className="h-full bg-accent rounded-full transition-[width] duration-200 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[12px] text-ink-faint tabular-nums">
+            <span>{filesTotal > 0 ? `${filesDone} / ${filesTotal} ${fileWord}` : ""}</span>
+            <span>
+              {progress && progress.bytes_total > 0
+                ? `${formatBytes(progress.bytes_done)} / ${formatBytes(progress.bytes_total)}`
+                : ""}
+            </span>
+            <span>{Math.round(pct)}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -7,8 +7,16 @@ use super::entry::FileEntry;
 /// Archive magic bytes.
 pub const MAGIC: &[u8; 6] = b"ANDRII";
 
-/// Current supported format version.
-pub const FORMAT_VERSION: u16 = 1;
+/// Current format version written by this build.
+///
+/// - v1: each file stored as one compressed+encrypted block (whole-file buffered).
+/// - v2: each file stored as a sequence of independently-sealed 1 MiB chunks, so
+///   writing/reading holds ~one chunk regardless of file size. The reader still
+///   opens v1 archives.
+pub const FORMAT_VERSION: u16 = 2;
+
+/// v2 plaintext chunk size (1 MiB). Bounds peak memory during create/extract.
+pub const CHUNK_SIZE: usize = 1 << 20;
 
 /// Footer magic bytes.
 pub const FOOTER_MAGIC: &[u8; 4] = b"ENDR";

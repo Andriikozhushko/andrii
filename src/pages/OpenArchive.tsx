@@ -5,7 +5,8 @@ import {
   Eye, EyeOff, ArrowDownToLine, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import Vault from "../components/Vault";
-import { InkFileGlyph, Keyhole, InkKey } from "../components/art";
+import { Keyhole, InkKey } from "../components/art";
+import FileTable, { type FileItem } from "../components/FileTable";
 import { useT } from "../i18n";
 import { recordOpened } from "../lib/storage";
 import { mapError } from "../lib/errors";
@@ -119,8 +120,6 @@ interface UnlockedArchiveProps {
   onClose: () => void;
 }
 
-type SortKey = "name" | "size" | "date";
-
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
@@ -132,9 +131,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 
 export function UnlockedArchive({ archivePath, password, info, onClose }: UnlockedArchiveProps) {
   const t = useT();
-  const [sortKey, setSortKey]       = useState<SortKey>("name");
-  const [sortAsc, setSortAsc]       = useState(true);
-  const [search, setSearch]         = useState("");
   const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [extracting, setExtracting] = useState(false);
   const [status, setStatus]         = useState<{ ok: boolean; msg: string } | null>(null);
@@ -144,27 +140,14 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
     ? Math.round((1 - info.total_compressed_size / info.total_original_size) * 100)
     : 0;
 
-  const filtered = [...info.entries]
-    .filter(e => basename(e.path).toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "name") cmp = basename(a.path).localeCompare(basename(b.path));
-      if (sortKey === "size") cmp = a.original_size - b.original_size;
-      if (sortKey === "date") cmp = a.modified_at - b.modified_at;
-      return sortAsc ? cmp : -cmp;
-    });
-
-  const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortAsc(!sortAsc);
-    else { setSortKey(k); setSortAsc(true); }
-  };
-  const toggle = (path: string) => {
-    const next = new Set(selected);
-    next.has(path) ? next.delete(path) : next.add(path);
-    setSelected(next);
-  };
-  const allSelected = filtered.length > 0 && selected.size === filtered.length;
-  const toggleAll = () => allSelected ? setSelected(new Set()) : setSelected(new Set(filtered.map(e => e.path)));
+  const items: FileItem[] = info.entries.map(e => ({
+    key: e.path,
+    name: basename(e.path),
+    sub: e.path,
+    size: e.original_size,
+    isDir: looksDir(e),
+    date: e.modified_at,
+  }));
 
   const handleExtract = async (all: boolean) => {
     const outputDir = await open({ multiple: false, directory: true });
@@ -186,13 +169,6 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
     }
   };
 
-  const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
-    <button onClick={() => toggleSort(k)} className="flex items-center gap-0.5 text-ink-faint hover:text-ink transition-colors">
-      {label}
-      {sortKey === k && (sortAsc ? <ChevronUp size={9} /> : <ChevronDown size={9} />)}
-    </button>
-  );
-
   return (
     <div className="canvas">
       {/* archive details */}
@@ -213,61 +189,26 @@ export function UnlockedArchive({ archivePath, password, info, onClose }: Unlock
         )}
       </div>
 
-      {/* toolbar */}
-      <div className="flex items-center gap-3 px-8 py-2.5 border-b border-border shrink-0">
-        <input type="text" className="input-box py-1.5 px-3 text-xs w-44" placeholder={t("open.filter")}
-          value={search} onChange={e => setSearch(e.target.value)} />
-        <span className="text-xs text-ink-faint">
-          {filtered.length !== info.file_count ? `${filtered.length} / ` : ""}{info.file_count}
-        </span>
-        <span className="flex gap-3 text-xs ml-1">
-          <SortBtn k="name" label={t("open.colName")} />
-          <SortBtn k="size" label={t("open.colSize")} />
-          <SortBtn k="date" label={t("open.colDate")} />
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          {selected.size > 0 && (
-            <button onClick={() => handleExtract(false)} disabled={extracting} className="btn-secondary text-xs py-1.5 px-3 gap-1.5">
-              <ArrowDownToLine size={13} /> {t("open.extract", { n: selected.size })}
+      {/* file table (shared with the pre-seal review list) */}
+      <FileTable
+        items={items}
+        selectable
+        selected={selected}
+        onSelectedChange={setSelected}
+        busy={extracting}
+        toolbarRight={keys => (
+          <>
+            {keys.length > 0 && (
+              <button onClick={() => handleExtract(false)} disabled={extracting} className="btn-secondary text-xs py-1.5 px-3 gap-1.5">
+                <ArrowDownToLine size={13} /> {t("open.extract", { n: keys.length })}
+              </button>
+            )}
+            <button onClick={() => handleExtract(true)} disabled={extracting} className="btn-primary text-xs py-1.5 px-3 gap-1.5">
+              <ArrowDownToLine size={13} /> {t("open.extractAll")}
             </button>
-          )}
-          <button onClick={() => handleExtract(true)} disabled={extracting} className="btn-primary text-xs py-1.5 px-3 gap-1.5">
-            <ArrowDownToLine size={13} /> {t("open.extractAll")}
-          </button>
-        </div>
-      </div>
-
-      {/* file table */}
-      <div className="flex-1 overflow-y-auto relative">
-        {extracting && <div className="absolute inset-0 z-10 bg-bg/55 animate-fade-in" />}
-        <div className="px-8 py-1">
-          <div className="file-row">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-3.5 h-3.5 accent-accent rounded" />
-            <span className="text-xs text-ink-faint flex-1">{t("open.selectAll")}</span>
-          </div>
-          {filtered.map(entry => {
-            const name = basename(entry.path);
-            const dir = looksDir(entry);
-            const checked = selected.has(entry.path);
-            return (
-              <div key={entry.path}
-                className="file-row cursor-pointer hover:bg-hover/60 rounded-lg -mx-2 px-2 transition-colors"
-                onClick={() => toggle(entry.path)}>
-                <input type="checkbox" checked={checked} onChange={() => toggle(entry.path)}
-                  onClick={e => e.stopPropagation()} className="w-3.5 h-3.5 accent-accent rounded shrink-0" />
-                <InkFileGlyph size={18} tint={dir ? "#C9760E" : "#5B5347"} className="shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-mono text-sm text-ink truncate">{name}</div>
-                  <div className="text-xs text-ink-faint truncate leading-tight">{entry.path}</div>
-                </div>
-                <span className="font-mono text-xs text-ink-faint shrink-0 tabular-nums">
-                  {dir ? "—" : formatBytes(entry.original_size)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {status && (
         <div className={`px-8 py-2.5 border-t border-border text-xs flex items-center gap-2 shrink-0 ${status.ok ? "text-safe-deep bg-safe/5" : "text-wax bg-wax/5"}`}>

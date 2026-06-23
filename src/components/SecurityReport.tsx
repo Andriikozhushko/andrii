@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import Vault from "./Vault";
 import { InkFolder, InkStamp } from "./art";
+import sealIntact from "../assets/seal-intact.png";
 import { useT } from "../i18n";
 import { recordCreated } from "../lib/storage";
 import type { CreateArchiveResponse, PasswordStrengthResult, CompressionLevel } from "../types";
@@ -10,6 +11,7 @@ interface SecurityReportProps {
   result: CreateArchiveResponse;
   passwordAnalysis: PasswordStrengthResult | null;
   compressionLabel: CompressionLevel;
+  durationMs: number;
   onDone: () => void;
   onCreateAnother: () => void;
 }
@@ -21,7 +23,15 @@ function formatBytes(b: number): string {
   return `${(b / 1073741824).toFixed(2)} GB`;
 }
 
-export default function SecurityReport({ result, onDone, onCreateAnother }: SecurityReportProps) {
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}m ${rem.toString().padStart(2, "0")}s`;
+}
+
+export default function SecurityReport({ result, durationMs, onDone, onCreateAnother }: SecurityReportProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
 
@@ -32,6 +42,7 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
   const saved = result.total_original_size > 0
     ? Math.round((1 - result.total_compressed_size / result.total_original_size) * 100)
     : 0;
+  const mostlyCompressed = saved < 5;
 
   // Remember this vault once.
   useEffect(() => {
@@ -51,7 +62,7 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
   return (
     <div className="canvas animate-fade-in">
       <div className="canvas-center px-10 gap-6">
-        <Vault state="sealed" tone="safe" size={172} />
+        <Vault state="sealed" tone="safe" size={172} src={sealIntact} />
 
         <div className="text-center space-y-2">
           <h2 className="font-serif text-[34px] font-semibold tracking-tight text-ink leading-none">{t("protected.title")}</h2>
@@ -61,11 +72,15 @@ export default function SecurityReport({ result, onDone, onCreateAnother }: Secu
         <div className="w-full max-w-sm rounded-2xl border border-border-strong bg-surface shadow-card overflow-hidden">
           <div className="px-4 py-3.5">
             <p className="font-mono text-sm font-medium text-ink truncate">{archiveName}</p>
-            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-faint">
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-faint tabular-nums">
               <span>{t("protected.inside", { count: result.file_count, files: fileWord })}</span>
-              <span>{formatBytes(result.total_compressed_size)}</span>
+              <span>{formatBytes(result.total_original_size)} → {formatBytes(result.total_compressed_size)}</span>
               {saved > 0 && <span>{t("protected.smaller", { pct: saved })}</span>}
+              <span>{formatDuration(durationMs)}</span>
             </div>
+            {mostlyCompressed && (
+              <p className="mt-2 text-[12px] text-ink-soft leading-relaxed">{t("protected.alreadyCompressed")}</p>
+            )}
           </div>
           <div className="flex border-t border-border divide-x divide-border">
             <button onClick={showInFolder} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[12px] text-ink-soft hover:bg-hover transition-colors">

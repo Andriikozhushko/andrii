@@ -51,8 +51,12 @@ export interface VerifyResult {
 }
 
 export interface ProgressEvent {
-  current: number;
-  total: number;
+  phase: "scanning" | "compressing" | "writing" | "finalizing";
+  files_done: number;
+  files_total: number;
+  bytes_done: number;
+  bytes_total: number;
+  percent: number;
   current_file: string;
 }
 
@@ -66,7 +70,7 @@ export type Theme  = "system" | "light" | "dark";
 export type CanvasState =
   | { mode: "idle" }
   | { mode: "create"; files: string[] }
-  | { mode: "created"; result: CreateArchiveResponse; passwordAnalysis: PasswordStrengthResult | null; compressionLabel: CompressionLevel }
+  | { mode: "created"; result: CreateArchiveResponse; passwordAnalysis: PasswordStrengthResult | null; compressionLabel: CompressionLevel; durationMs: number }
   | { mode: "open"; archivePath: string }
   | { mode: "unlocked"; archivePath: string; password: string; info: OpenArchiveResponse }
   | { mode: "verify"; archivePath?: string }

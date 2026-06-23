@@ -65,7 +65,7 @@ pub fn verify_archive(archive_path: &Path) -> Result<VerifyResult, ArchiveError>
         Err(e) => return Err(e),
     };
 
-    let version_supported = matches!(fixed_header.version, 1);
+    let version_supported = matches!(fixed_header.version, 1 | 2);
 
     if !version_supported {
         return Ok(VerifyResult {
@@ -76,8 +76,9 @@ pub fn verify_archive(archive_path: &Path) -> Result<VerifyResult, ArchiveError>
             integrity_hash_valid: false,
             file_size,
             error: Some(format!(
-                "Archive version {} is not supported (max supported: 1)",
-                fixed_header.version
+                "Archive version {} is not supported (max supported: {})",
+                fixed_header.version,
+                crate::format::header::FORMAT_VERSION,
             )),
         });
     }

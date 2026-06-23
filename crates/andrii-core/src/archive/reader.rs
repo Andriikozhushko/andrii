@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use zeroize::Zeroizing;
@@ -14,7 +14,7 @@ use andrii_crypto::{
 use crate::error::ArchiveError;
 use crate::format::{
     entry::{FileEntry, FileEntrySummary},
-    header::{EncryptedHeader, FixedHeader, FIXED_HEADER_SIZE},
+    header::{EncryptedHeader, FixedHeader, CHUNK_SIZE, FIXED_HEADER_SIZE},
 };
 
 /// Information about an opened archive.
@@ -138,52 +138,128 @@ impl ArchiveReader {
     }
 
     fn extract_entry(&self, entry: &FileEntry, output_dir: &Path) -> Result<PathBuf, ArchiveError> {
-        // Compute absolute offset in the archive file
+        if self.fixed_header.version >= 2 {
+            self.extract_entry_v2(entry, output_dir)
+        } else {
+            self.extract_entry_v1(entry, output_dir)
+        }
+    }
+
+    /// v1: a single compressed+encrypted block per file (whole file buffered).
+    fn extract_entry_v1(&self, entry: &FileEntry, output_dir: &Path) -> Result<PathBuf, ArchiveError> {
         let abs_offset = self.data_section_start + entry.data_offset;
 
-        // Read the encrypted block
         let mut file = File::open(&self.path)?;
         file.seek(SeekFrom::Start(abs_offset))?;
         let mut encrypted_block = vec![0u8; entry.compressed_encrypted_size as usize];
         file.read_exact(&mut encrypted_block)?;
 
-        // Decode nonce and hash
         let nonce = entry
             .decode_nonce()
             .map_err(|e| ArchiveError::Format(format!("Invalid nonce for {}: {}", entry.path, e)))?;
         let expected_hash = entry.decode_hash()?;
 
         // Decrypt: AAD = blake3 hash (binds block to its metadata entry).
-        // Decrypted plaintext is zeroized on drop.
         let compressed = Zeroizing::new(
             decrypt(&self.master_key, &nonce, &encrypted_block, &expected_hash)
                 .map_err(|_| ArchiveError::Corrupted(format!("Content authentication failed for: {}", entry.path)))?,
         );
 
-        // Decompress
         let content = Zeroizing::new(decompress(&compressed, Some(entry.original_size as usize))?);
 
-        // Verify BLAKE3 hash (fail-closed: never write content that doesn't match)
-        let actual_hash = hash_bytes(&content);
-        if actual_hash != expected_hash {
+        // Fail-closed: never write content that doesn't match its hash.
+        if hash_bytes(&content) != expected_hash {
             return Err(ArchiveError::IntegrityFailed(entry.path.clone()));
         }
 
-        // Write to output
         let out_path = output_dir.join(&entry.path);
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::write(&out_path, content.as_slice())?;
-
-        // Restore modification time if possible
-        #[cfg(unix)]
-        if entry.unix_mode != 0 {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = fs::Permissions::from_mode(entry.unix_mode);
-            let _ = fs::set_permissions(&out_path, perms);
-        }
-
+        restore_mode(&out_path, entry.unix_mode);
         Ok(out_path)
+    }
+
+    /// v2: a sequence of independently-sealed chunks. Streams chunk→decrypt→
+    /// decompress→write to a temp file, verifies the full-file BLAKE3, then
+    /// atomically renames — so corrupt content is never committed and peak
+    /// memory stays at ~one chunk.
+    fn extract_entry_v2(&self, entry: &FileEntry, output_dir: &Path) -> Result<PathBuf, ArchiveError> {
+        let abs_offset = self.data_section_start + entry.data_offset;
+        let base16 = entry
+            .decode_base_nonce()
+            .map_err(|e| ArchiveError::Format(format!("Invalid nonce for {}: {}", entry.path, e)))?;
+        let expected_hash = entry.decode_hash()?;
+
+        let out_path = output_dir.join(&entry.path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let tmp_path = out_path.with_extension(format!(
+            "andrii-x-{}.tmp",
+            std::process::id()
+        ));
+
+        let result = (|| -> Result<(), ArchiveError> {
+            let mut reader = BufReader::new(File::open(&self.path)?);
+            reader.seek(SeekFrom::Start(abs_offset))?;
+            let mut writer = BufWriter::new(File::create(&tmp_path)?);
+            let mut hasher = blake3::Hasher::new();
+
+            for i in 0..entry.chunk_count {
+                let mut len_buf = [0u8; 4];
+                reader.read_exact(&mut len_buf)?;
+                let sealed_len = u32::from_le_bytes(len_buf) as usize;
+                let mut sealed = vec![0u8; sealed_len];
+                reader.read_exact(&mut sealed)?;
+
+                let mut nonce = [0u8; 24];
+                nonce[..16].copy_from_slice(&base16);
+                nonce[16..24].copy_from_slice(&i.to_be_bytes());
+                let mut aad = [0u8; 9];
+                aad[..8].copy_from_slice(&i.to_be_bytes());
+                aad[8] = (i + 1 == entry.chunk_count) as u8;
+
+                let payload = decrypt(&self.master_key, &nonce, &sealed, &aad)
+                    .map_err(|_| ArchiveError::Corrupted(format!("Content authentication failed for: {}", entry.path)))?;
+
+                let plain: Zeroizing<Vec<u8>> = if entry.stored_raw {
+                    payload
+                } else {
+                    Zeroizing::new(decompress(&payload, Some(CHUNK_SIZE))?)
+                };
+                hasher.update(&plain);
+                writer.write_all(&plain)?;
+            }
+            writer.flush()?;
+
+            // Fail-closed: never commit content that doesn't match its hash.
+            if hasher.finalize().as_bytes() != &expected_hash {
+                return Err(ArchiveError::IntegrityFailed(entry.path.clone()));
+            }
+            Ok(())
+        })();
+
+        if let Err(e) = result {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e);
+        }
+        fs::rename(&tmp_path, &out_path).map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            ArchiveError::Io(e)
+        })?;
+        restore_mode(&out_path, entry.unix_mode);
+        Ok(out_path)
+    }
+}
+
+/// Restore unix permission bits when present (no-op on Windows / mode 0).
+fn restore_mode(_path: &Path, _unix_mode: u32) {
+    #[cfg(unix)]
+    if _unix_mode != 0 {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = fs::Permissions::from_mode(_unix_mode);
+        let _ = fs::set_permissions(_path, perms);
     }
 }

@@ -103,7 +103,8 @@
     "sealAnother": "Sellar otro",
     "inside": "{count} {files}",
     "smaller": "{pct}% más pequeño",
-    "footnote": "Cifrado y sellado localmente en tu dispositivo."
+    "footnote": "Cifrado y sellado localmente en tu dispositivo.",
+    "alreadyCompressed": "La mayoría de los archivos ya estaban comprimidos, por lo que se ahorró poco espacio."
   },
   "strength": {
     "veryWeak": "Muy débil",
@@ -160,5 +161,11 @@
     "title": "Archivos recientes",
     "empty": "Los archivos sellados y abiertos aparecerán aquí.",
     "remove": "Quitar de la lista"
+  },
+  "progress": {
+    "scanning": "Escaneando archivos",
+    "compressing": "Comprimiendo y cifrando",
+    "writing": "Escribiendo archivo",
+    "finalizing": "Finalizando"
   }
 }

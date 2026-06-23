@@ -1,7 +1,12 @@
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use andrii_compress::CompressionLevel;
-use andrii_core::{ArchiveReader, ArchiveWriter, CreateArchiveOptions, VerifyResult, verify_archive};
+use andrii_core::{
+    ArchiveReader, ArchiveWriter, CreateArchiveOptions, Phase, Progress, VerifyResult,
+    verify_archive,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
@@ -27,9 +32,37 @@ pub struct CreateArchiveResponse {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ProgressEvent {
-    pub current: u64,
-    pub total: u64,
+    /// "scanning" | "compressing" | "writing" | "finalizing".
+    pub phase: String,
+    pub files_done: u64,
+    pub files_total: u64,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    /// 0..100, derived from bytes (falls back to files when sizes are unknown).
+    pub percent: f64,
     pub current_file: String,
+}
+
+impl ProgressEvent {
+    fn from_progress(p: &Progress) -> Self {
+        let percent = if p.bytes_total > 0 {
+            (p.bytes_done as f64 / p.bytes_total as f64) * 100.0
+        } else if p.files_total > 0 {
+            (p.files_done as f64 / p.files_total as f64) * 100.0
+        } else {
+            0.0
+        }
+        .clamp(0.0, 100.0);
+        ProgressEvent {
+            phase: p.phase.as_str().to_string(),
+            files_done: p.files_done,
+            files_total: p.files_total,
+            bytes_done: p.bytes_done,
+            bytes_total: p.bytes_total,
+            percent,
+            current_file: p.current_file.to_string(),
+        }
+    }
 }
 
 /// Create a new .andrii archive.
@@ -57,20 +90,30 @@ pub async fn create_archive(
 
     let app_clone = app.clone();
     let result = tokio::task::spawn_blocking(move || {
+        // Throttle UI updates to ~30/s, but always emit on a phase change so the
+        // label flips promptly. A 1 GB file's ~1000 chunks won't flood the channel.
+        let last: Mutex<(Instant, &'static str)> = Mutex::new((Instant::now(), ""));
         let opts = CreateArchiveOptions {
             archive_name: request.archive_name,
             password: request.password,
             compression,
             output_path: output_path.clone(),
-            progress_callback: Some(Box::new(move |current, total, file| {
-                let _ = app_clone.emit(
-                    "archive-progress",
-                    ProgressEvent {
-                        current,
-                        total,
-                        current_file: file.to_string(),
-                    },
-                );
+            progress_callback: Some(Box::new(move |p: &Progress| {
+                let phase = p.phase.as_str();
+                let emit = {
+                    let mut g = last.lock().unwrap();
+                    let changed = g.1 != phase;
+                    if changed || g.0.elapsed().as_millis() >= 33 {
+                        *g = (Instant::now(), phase);
+                        true
+                    } else {
+                        false
+                    }
+                };
+                // Always surface the terminal Finalizing tick.
+                if emit || p.phase == Phase::Finalizing {
+                    let _ = app_clone.emit("archive-progress", ProgressEvent::from_progress(p));
+                }
             })),
         };
 

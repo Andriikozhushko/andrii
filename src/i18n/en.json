@@ -103,7 +103,8 @@
     "sealAnother": "Seal another",
     "inside": "{count} {files}",
     "smaller": "{pct}% smaller",
-    "footnote": "Encrypted and sealed locally on your device."
+    "footnote": "Encrypted and sealed locally on your device.",
+    "alreadyCompressed": "Most files were already compressed, so little space was saved."
   },
   "strength": {
     "veryWeak": "Very weak",
@@ -160,5 +161,11 @@
     "title": "Recent archives",
     "empty": "Sealed and opened archives will appear here.",
     "remove": "Remove from list"
+  },
+  "progress": {
+    "scanning": "Scanning files",
+    "compressing": "Compressing & encrypting",
+    "writing": "Writing archive",
+    "finalizing": "Finalizing"
   }
 }

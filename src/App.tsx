@@ -5,6 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import TitleBar, { type NavTarget } from "./components/TitleBar";
 import Vault from "./components/Vault";
 import { InkAddFiles, InkFolder, InkLens } from "./components/art";
+import chestOpen from "./assets/chest-open.png";
+import verifyGlass from "./assets/verify-glass.png";
 import SecurityReport from "./components/SecurityReport";
 import Onboarding from "./components/Onboarding";
 import Settings from "./components/Settings";
@@ -105,7 +107,7 @@ function OpenIdleCanvas({
   return (
     <div className="canvas">
       <Hero
-        art={<Vault state="sealed" size={184} />}
+        art={<Vault state="opened" size={184} src={chestOpen} />}
         isDragging={isDragging}
         title={t("open.title")}
         dragTitle={t("open.dragTitle")}
@@ -123,7 +125,7 @@ function VerifyIdleCanvas({ isDragging, onBrowseArchive }: { isDragging: boolean
   return (
     <div className="canvas">
       <Hero
-        art={<Vault state="sealed" size={184} />}
+        art={<Vault state="sealed" size={184} src={verifyGlass} />}
         isDragging={isDragging}
         title={t("verify.title")}
         dragTitle={t("verify.dragTitle")}
@@ -266,8 +268,8 @@ export default function App() {
             files={canvas.files}
             isDragging={isDragging}
             onFilesChange={files => setState({ mode: "create", files })}
-            onCreated={(result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel) =>
-              setState({ mode: "created", result, passwordAnalysis: analysis, compressionLabel: compression })}
+            onCreated={(result: CreateArchiveResponse, analysis: PasswordStrengthResult | null, compression: CompressionLevel, durationMs: number) =>
+              setState({ mode: "created", result, passwordAnalysis: analysis, compressionLabel: compression, durationMs })}
             onClear={() => setState({ mode: "idle" })}
           />
         )}
@@ -277,6 +279,7 @@ export default function App() {
             result={canvas.result}
             passwordAnalysis={canvas.passwordAnalysis}
             compressionLabel={canvas.compressionLabel}
+            durationMs={canvas.durationMs}
             onDone={() => setState({ mode: "idle" })}
             onCreateAnother={() => setState({ mode: "idle" })}
           />
