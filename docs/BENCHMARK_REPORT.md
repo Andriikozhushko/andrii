@@ -10,7 +10,7 @@ Each dataset was generated deterministically and archived by ANDRII (Fast / Bala
 - **CPU:** AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD
 - **Rust:** rustc 1.96.0 (ac68faa20 2026-05-25)
 - **ANDRII:** v1.0.0
-- **Commit:** `0d00a56`
+- **Commit:** `f88ff58`
 
 ## 3. Datasets
 
@@ -27,24 +27,24 @@ Each dataset was generated deterministically and archived by ANDRII (Fast / Bala
 
 | Dataset | Tool | Mode | Input | Output | Saved | Create | Extract | Verify | Create MB/s |
 |---|----|----|--:|--:|--:|--:|--:|--:|--:|
-| documents-mixed | ANDRII | Balanced | 50.0 MB | 50.0 MB | -0.0% | 14.44s | 14.02s | 33 ms | 3.5 |
-| documents-mixed | ANDRII | Fast | 50.0 MB | 50.0 MB | -0.0% | 13.73s | 14.03s | 29 ms | 3.6 |
-| documents-mixed | ANDRII | Maximum | 50.0 MB | 50.0 MB | -0.0% | 14.49s | 14.49s | 35 ms | 3.4 |
-| incompressible-media-like | ANDRII | Balanced | 101.0 MB | 101.0 MB | -0.0% | 26.31s | 27.68s | 68 ms | 3.8 |
-| incompressible-media-like | ANDRII | Fast | 101.0 MB | 101.0 MB | -0.0% | 26.74s | 25.30s | 65 ms | 3.8 |
-| incompressible-media-like | ANDRII | Maximum | 101.0 MB | 101.0 MB | -0.0% | 26.34s | 26.48s | 61 ms | 3.8 |
-| large-binary-1gb | ANDRII | Balanced | 64.0 MB | 64.0 MB | -0.0% | 17.92s | 18.10s | 50 ms | 3.6 |
-| large-binary-1gb | ANDRII | Fast | 64.0 MB | 64.0 MB | -0.0% | 19.84s | 18.99s | 44 ms | 3.2 |
-| large-binary-1gb | ANDRII | Maximum | 64.0 MB | 64.0 MB | -0.0% | 18.02s | 18.50s | 49 ms | 3.6 |
-| mixed-realistic | ANDRII | Balanced | 108.9 MB | 57.8 MB | 47.0% | 30.26s | 18.22s | 33 ms | 3.6 |
-| mixed-realistic | ANDRII | Fast | 108.9 MB | 58.1 MB | 46.7% | 26.23s | 19.47s | 41 ms | 4.2 |
-| mixed-realistic | ANDRII | Maximum | 108.9 MB | 55.9 MB | 48.7% | 1m 44s | 18.83s | 38 ms | 1.0 |
-| source-code | ANDRII | Balanced | 7.2 MB | 5.7 MB | 20.8% | 9.83s | 4.31s | 7 ms | 0.7 |
-| source-code | ANDRII | Fast | 7.2 MB | 5.7 MB | 20.7% | 9.92s | 4.02s | 9 ms | 0.7 |
-| source-code | ANDRII | Maximum | 7.2 MB | 5.7 MB | 21.1% | 16.39s | 4.13s | 10 ms | 0.4 |
-| text-small | ANDRII | Balanced | 10.0 MB | 2.0 MB | 79.8% | 9.70s | 4.08s | 6 ms | 1.0 |
-| text-small | ANDRII | Fast | 10.0 MB | 2.1 MB | 78.5% | 8.46s | 3.91s | 7 ms | 1.2 |
-| text-small | ANDRII | Maximum | 10.0 MB | 1.6 MB | 83.6% | 30.03s | 3.71s | 7 ms | 0.3 |
+| documents-mixed | ANDRII | Balanced | 50.0 MB | 50.0 MB | -0.0% | 13.45s | 13.03s | 28 ms | 3.7 |
+| documents-mixed | ANDRII | Fast | 50.0 MB | 50.0 MB | -0.0% | 13.65s | 13.59s | 28 ms | 3.7 |
+| documents-mixed | ANDRII | Maximum | 50.0 MB | 50.0 MB | -0.0% | 13.10s | 13.67s | 30 ms | 3.8 |
+| incompressible-media-like | ANDRII | Balanced | 101.0 MB | 101.0 MB | -0.0% | 25.33s | 24.25s | 70 ms | 4.0 |
+| incompressible-media-like | ANDRII | Fast | 101.0 MB | 101.0 MB | -0.0% | 24.91s | 25.24s | 55 ms | 4.1 |
+| incompressible-media-like | ANDRII | Maximum | 101.0 MB | 101.0 MB | -0.0% | 24.94s | 24.40s | 58 ms | 4.1 |
+| large-binary-1gb | ANDRII | Balanced | 64.0 MB | 64.0 MB | -0.0% | 17.62s | 18.57s | 45 ms | 3.6 |
+| large-binary-1gb | ANDRII | Fast | 64.0 MB | 64.0 MB | -0.0% | 18.29s | 18.00s | 39 ms | 3.5 |
+| large-binary-1gb | ANDRII | Maximum | 64.0 MB | 64.0 MB | -0.0% | 17.28s | 17.70s | 36 ms | 3.7 |
+| mixed-realistic | ANDRII | Balanced | 108.9 MB | 57.8 MB | 47.0% | 28.15s | 18.08s | 31 ms | 3.9 |
+| mixed-realistic | ANDRII | Fast | 108.9 MB | 58.1 MB | 46.7% | 25.52s | 17.94s | 39 ms | 4.3 |
+| mixed-realistic | ANDRII | Maximum | 108.9 MB | 55.9 MB | 48.7% | 1m 32s | 17.44s | 42 ms | 1.2 |
+| source-code | ANDRII | Balanced | 7.2 MB | 5.7 MB | 20.9% | 8.97s | 3.86s | 10 ms | 0.8 |
+| source-code | ANDRII | Fast | 7.2 MB | 5.7 MB | 20.7% | 8.81s | 3.74s | 8 ms | 0.8 |
+| source-code | ANDRII | Maximum | 7.2 MB | 5.7 MB | 21.1% | 16.04s | 4.16s | 8 ms | 0.4 |
+| text-small | ANDRII | Balanced | 10.0 MB | 2.0 MB | 79.8% | 8.15s | 3.19s | 5 ms | 1.2 |
+| text-small | ANDRII | Fast | 10.0 MB | 2.1 MB | 78.5% | 8.02s | 3.16s | 7 ms | 1.2 |
+| text-small | ANDRII | Maximum | 10.0 MB | 1.6 MB | 83.6% | 25.43s | 3.05s | 7 ms | 0.4 |
 
 ## 5. Key Findings
 

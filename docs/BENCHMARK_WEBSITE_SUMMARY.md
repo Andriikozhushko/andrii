@@ -28,7 +28,7 @@ The following claims are backed by reproducible benchmarks ([see full report](BE
 | large-binary-1gb | 1 | 64.0 MB | Fast | -0.0% |
 | mixed-realistic | 327 | 108.9 MB | Balanced | 47.0% |
 | mixed-realistic | 327 | 108.9 MB | Fast | 46.7% |
-| source-code | 205 | 7.2 MB | Balanced | 20.8% |
+| source-code | 205 | 7.2 MB | Balanced | 20.9% |
 | source-code | 205 | 7.2 MB | Fast | 20.7% |
 | text-small | 200 | 10.0 MB | Balanced | 79.8% |
 | text-small | 200 | 10.0 MB | Fast | 78.5% |

@@ -401,6 +401,30 @@ fn generate_large_binary_1gb(base: &Path, quick: bool) -> Vec<PathBuf> {
     vec![p]
 }
 
+// ── Many-small-files generator ────────────────────────────────────────────────────
+
+fn generate_many_small_files(base: &Path, quick: bool) -> Vec<PathBuf> {
+    let dir = base.join("many-small-files");
+    let count = if quick { 2000 } else { 5000 };
+    let mut paths = Vec::new();
+    for i in 0..count {
+        let ext = match i % 5 {
+            0 => "ts", 1 => "rs", 2 => "json", 3 => "txt", _ => "md",
+        };
+        // Vary file sizes from ~100B to ~4KB to model a real micro-file tree.
+        let len = 100 + ((i as u64 * 997 + 61) % 4000) as usize;
+        let p = dir.join(format!(
+            "mod-{bucket}/{name}-{i:05}.{ext}",
+            bucket = i % 20,
+            name = ["lib", "util", "helper", "types", "config"][i % 5],
+        ));
+        let body = generate_text_payload(len, i as u64);
+        write_file(&p, body.as_bytes());
+        paths.push(p);
+    }
+    paths
+}
+
 // ── ANDRII benchmark ──────────────────────────────────────────────────────
 
 fn bench_andrii(
@@ -769,7 +793,7 @@ fn write_markdown_report(aggregated: &[AggregatedRun], env: &Environment, path: 
     s.push_str("\n## 3. Datasets\n\n");
     s.push_str("| Dataset | Files | Input Size | Description |\n");
     s.push_str("|---|--:|--:|---|\n");
-    for ds in ["text-small", "source-code", "documents-mixed", "incompressible-media-like", "mixed-realistic", "large-binary-1gb"] {
+    for ds in ["text-small", "source-code", "documents-mixed", "incompressible-media-like", "mixed-realistic", "many-small-files", "large-binary-1gb"] {
         if let Some(first) = aggregated.iter().find(|a| a.dataset == ds) {
             s.push_str(&format!("| {} | {} | {} | {} |\n",
                 ds, first.file_count, human(first.input_bytes),
@@ -779,6 +803,7 @@ fn write_markdown_report(aggregated: &[AggregatedRun], env: &Environment, path: 
                     "documents-mixed" => "Generated PDF/DOCX/PPTX-like blobs with compressible headers",
                     "incompressible-media-like" => "High-entropy .jpg/.png/.mp4/.mov files",
                     "mixed-realistic" => "40% text, 30% media, 20% docs, 10% source",
+                    "many-small-files" => "2000–5000 tiny source/text files (100 B–4 KB)",
                     "large-binary-1gb" => "Single large random binary",
                     _ => "",
                 },
@@ -944,7 +969,12 @@ fn main() {
     println!("   {} files, {}", d.len(), human(dir_size(&d)));
     datasets.insert("mixed-realistic".into(), d);
 
-    println!("\n6. large-binary-1gb");
+    println!("\n6. many-small-files");
+    let d = generate_many_small_files(&data_dir, quick);
+    println!("   {} files, {}", d.len(), human(dir_size(&d)));
+    datasets.insert("many-small-files".into(), d);
+
+    println!("\n7. large-binary-1gb");
     let d = generate_large_binary_1gb(&data_dir, quick);
     println!("   {} files, {}", d.len(), human(dir_size(&d)));
     datasets.insert("large-binary-1gb".into(), d);

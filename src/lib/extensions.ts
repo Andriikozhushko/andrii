@@ -1,8 +1,9 @@
 /**
- * Mirror of the Rust `is_probably_incompressible` heuristic
- * (`crates/andrii-compress/src/lib.rs`). Used only to show an honest UI hint —
- * the actual decision is always made in the core.
+ * Mirror of the Rust compression heuristics
+ * (`crates/andrii-compress/src/lib.rs`). Used only to show honest UI hints —
+ * the actual compression decision is always made in the core.
  */
+
 const INCOMPRESSIBLE_EXTS = new Set([
   // images
   "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif",
@@ -16,6 +17,25 @@ const INCOMPRESSIBLE_EXTS = new Set([
   "pdf", "docx", "xlsx", "pptx", "odt", "ods", "odp", "epub",
   // packages / binaries
   "jar", "apk", "ipa", "dmg", "exe", "msi", "appimage", "crx", "nupkg",
+]);
+
+/** Extensions that always benefit from compression (source code, text, config). */
+const COMPRESSIBLE_EXTS = new Set([
+  "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs",
+  "py", "java", "kt", "c", "cpp", "h", "hpp",
+  "go", "rb", "php", "swift", "cs", "fs",
+  "sh", "bash", "zsh", "ps1", "bat", "cmd",
+  "yaml", "yml", "toml", "ini", "cfg", "conf",
+  "txt", "text", "md", "markdown", "rst", "tex", "latex",
+  "xml", "svg", "html", "htm", "css", "scss", "sass", "less",
+  "json", "jsonl", "csv", "tsv", "log",
+  "diff", "patch", "env", "makefile", "dockerfile",
+  "lock", "sql", "lua", "vim", "r", "dart",
+  "vue", "svelte", "astro",
+  "tf", "hcl", "proto", "graphql", "prisma",
+  "nix", "zig", "nim", "hs", "elm", "ml",
+  "erl", "ex", "exs", "clj", "cljs",
+  "edn", "jl", "lean",
 ]);
 
 const MEDIA_EXTS = new Set([
@@ -33,6 +53,10 @@ function ext(path: string): string {
 
 export function is_probably_incompressible(path: string): boolean {
   return INCOMPRESSIBLE_EXTS.has(ext(path));
+}
+
+export function is_compressible_source(path: string): boolean {
+  return COMPRESSIBLE_EXTS.has(ext(path));
 }
 
 export function is_media(path: string): boolean {

@@ -64,6 +64,7 @@ pub fn decompress(data: &[u8], original_size_hint: Option<usize>) -> Result<Vec<
 
 /// Estimate whether compression is beneficial for this data.
 /// Returns false for already-compressed data (high entropy).
+/// Relaxed threshold: 2% compression is enough to be worthwhile (was 5%).
 pub fn should_compress(data: &[u8]) -> bool {
     if data.len() < 64 {
         return false;
@@ -71,8 +72,68 @@ pub fn should_compress(data: &[u8]) -> bool {
     // Sample the first 4KB to estimate entropy
     let sample = &data[..data.len().min(4096)];
     let compressed = zstd::encode_all(sample, 1).unwrap_or_default();
-    // If compression ratio < 0.95, compression is worthwhile
-    (compressed.len() as f64 / sample.len() as f64) < 0.95
+    // If compression ratio < 0.98 (≥2% saving), compression is worthwhile.
+    (compressed.len() as f64 / sample.len() as f64) < 0.98
+}
+
+/// File extensions that are always worth compressing — source code, markup,
+/// configuration, and text-based formats. These skip the entropy check in
+/// [`decide_level`] and are compressed at the selected level unconditionally.
+const COMPRESSIBLE_EXTS: &[&str] = &[
+    // source code
+    "rs", "rlib", "ts", "tsx", "js", "jsx", "mjs", "cjs",
+    "py", "pyi", "pyx",
+    "java", "kt", "kts", "scala", "groovy",
+    "c", "cpp", "cxx", "cc", "h", "hpp", "hxx",
+    "go", "rb", "php", "swift", "cs", "fs", "fsx", "vb", "vbs",
+    "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
+    "yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
+    "txt", "text", "md", "markdown", "rst", "tex", "latex", "bib",
+    "xml", "svg", "html", "htm", "css", "scss", "sass", "less",
+    "json", "jsonl", "json5", "csv", "tsv", "log",
+    "diff", "patch", "env", "example", "sample",
+    "makefile", "make", "mk", "cmake", "meson", "just",
+    "dockerfile", "dockerignore", "gitignore", "editorconfig",
+    "nix", "proto", "thrift", "graphql", "gql", "prisma",
+    "lock", "toml",
+    "tf", "tfvars", "hcl",
+    "sql", "plsql", "psql",
+    "lua", "vim", "el", "elisp",
+    "r", "rmd", "rnw",
+    "dart", "ex", "exs", "erl", "hrl",
+    "hs", "lhs", "elm", "ml", "mli",
+    "nim", "zig", "odin", "vala", "genie",
+    "wgsl", "glsl", "hlsl",
+    "hack", "hackpartial",
+    "svelte", "vue", "astro",
+    "heex", "eex", "leex",
+    "j2", "jinja", "tera", "mustache", "handlebars",
+    "pl", "pm", "t",
+    "cbl", "cob", "cpy",
+    "clj", "cljs", "cljc", "edn",
+    "purs", "dhall", "nickel",
+    "cue", "jsonnet", "libsonnet",
+    "ncl",
+    "f90", "f95", "f03", "f08",
+    "jl",
+    "lean",
+    "move",
+    "slint",
+    "wgsl",
+    "smithy",
+];
+
+/// Check whether a path's extension is in the given set.
+fn ext_in_set(path: &str, set: &[&str]) -> bool {
+    let ext = path
+        .rsplit(['/', '\\'])
+        .next()
+        .and_then(|name| name.rsplit('.').next().filter(|e| !e.is_empty() && *e != name))
+        .map(|e| e.to_ascii_lowercase());
+    match ext {
+        Some(e) => set.contains(&e.as_str()),
+        None => false,
+    }
 }
 
 /// File extensions that are already compressed; trying to zstd them wastes time
@@ -95,33 +156,41 @@ const INCOMPRESSIBLE_EXTS: &[&str] = &[
 /// Heuristic: is this file most likely already compressed, judging only by its
 /// path extension? Used to skip pointless zstd work entirely.
 pub fn is_probably_incompressible(path: &str) -> bool {
-    let ext = path
-        .rsplit(['/', '\\'])
-        .next()
-        .and_then(|name| name.rsplit('.').next().filter(|e| !e.is_empty() && *e != name))
-        .map(|e| e.to_ascii_lowercase());
-    match ext {
-        Some(e) => INCOMPRESSIBLE_EXTS.contains(&e.as_str()),
-        None => false,
-    }
+    ext_in_set(path, INCOMPRESSIBLE_EXTS)
+}
+
+/// True when the file extension is a source code, markup, config or text format
+/// that virtually always compresses well. These formats skip the entropy
+/// sampling step and are compressed unconditionally.
+pub fn is_compressible_source(path: &str) -> bool {
+    ext_in_set(path, COMPRESSIBLE_EXTS)
 }
 
 /// Decide the effective per-file compression level given the user-selected
 /// `mode`, the file's path, and a sample of its leading bytes.
 ///
 /// Returns [`CompressionLevel::None`] (store raw) when compression is unlikely
-/// to help, so already-compressed media doesn't burn CPU for ~0% gain. This is
-/// what makes Fast/Balanced/Maximum behave meaningfully differently:
-/// - `Fast`     — skip known-compressed extensions, otherwise level 1 (no sampling).
-/// - `Balanced` — skip known-compressed extensions, then an entropy sample, else level 6.
-/// - `Maximum`  — same skipping, else level 19 (only text/code/docs really shrink).
+/// to help, so already-compressed media doesn't burn CPU for ~0% gain.
+///
+/// Strategy per mode:
+/// - `Fast`     — skip known-compressed extensions, always compress source
+///                 formats, otherwise zstd-1 (no sampling needed).
+/// - `Balanced` — same skip list, always compress source formats, then an
+///                 entropy check for unknown extensions.
+/// - `Maximum`  — same as Balanced but zstd-19 for compressible files.
 pub fn decide_level(path: &str, sample: &[u8], mode: CompressionLevel) -> CompressionLevel {
     if mode == CompressionLevel::None {
         return CompressionLevel::None;
     }
+    // Incompressible (media / archive / package) → raw.
     if is_probably_incompressible(path) {
         return CompressionLevel::None;
     }
+    // Known source / text / doc formats → always compress.
+    if is_compressible_source(path) {
+        return mode;
+    }
+    // Unknown extensions → entropy sample for Balanced/Maximum.
     match mode {
         CompressionLevel::Fast => CompressionLevel::Fast,
         CompressionLevel::Balanced | CompressionLevel::Maximum => {
@@ -205,5 +274,29 @@ mod tests {
             *b = (x >> 24) as u8;
         }
         assert_eq!(decide_level("blob.bin", &data, CompressionLevel::Balanced), CompressionLevel::None);
+    }
+
+    #[test]
+    fn test_compressible_source_ext_always_compresses() {
+        // Source/whitelist extensions skip the entropy check entirely.
+        let mut data = vec![0u8; 8192];
+        let mut x: u64 = 1;
+        for b in data.iter_mut() {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            *b = (x >> 24) as u8;
+        }
+        // Even high-entropy content with a whitelisted ext still gets compressed.
+        assert_eq!(decide_level("main.rs", &data, CompressionLevel::Balanced), CompressionLevel::Balanced);
+        assert_eq!(decide_level("Component.tsx", &data, CompressionLevel::Maximum), CompressionLevel::Maximum);
+        assert_eq!(decide_level("setup.py", &data, CompressionLevel::Fast), CompressionLevel::Fast);
+    }
+
+    #[test]
+    fn test_media_ext_still_raw() {
+        let data = vec![0u8; 8192];
+        assert_eq!(decide_level("photo.jpg", &data, CompressionLevel::Maximum), CompressionLevel::None);
+        assert_eq!(decide_level("clip.mp4", &data, CompressionLevel::Balanced), CompressionLevel::None);
     }
 }
