@@ -7,10 +7,10 @@
   "output_bytes": 60555767,
   "compression_ratio": 0.46993242802912794,
   "space_saved_pct": 46.993242802912796,
-  "create_seconds": 28.1459984,
-  "extract_seconds": 18.0820631,
-  "verify_seconds": 0.0305503,
-  "create_throughput_mbps": 3.870862112728676,
-  "extract_throughput_mbps": 6.025268147166345,
+  "create_seconds": 26.9641197,
+  "extract_seconds": 17.8571711,
+  "verify_seconds": 0.0347565,
+  "create_throughput_mbps": 4.040527932809983,
+  "extract_throughput_mbps": 6.101149964984204,
   "rep": 1
 }

@@ -1,0 +1,16 @@
+{
+  "dataset": "many-small-files",
+  "file_count": 2000,
+  "input_bytes": 4193000,
+  "tool": "ANDRII",
+  "mode": "Maximum",
+  "output_bytes": 1729508,
+  "compression_ratio": 0.587524922489864,
+  "space_saved_pct": 58.7524922489864,
+  "create_seconds": 82.3442147,
+  "extract_seconds": 4.8066044,
+  "verify_seconds": 0.0061634,
+  "create_throughput_mbps": 0.0485614736051567,
+  "extract_throughput_mbps": 0.8319295860278009,
+  "rep": 1
+}
