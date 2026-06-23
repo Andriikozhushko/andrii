@@ -1,0 +1,16 @@
+{
+  "dataset": "large-binary-1gb",
+  "file_count": 1,
+  "input_bytes": 67108864,
+  "tool": "ANDRII",
+  "mode": "Balanced",
+  "output_bytes": 67111303,
+  "compression_ratio": -0.000036343932151794434,
+  "space_saved_pct": -0.0036343932151794434,
+  "create_seconds": 17.9163011,
+  "extract_seconds": 18.1027715,
+  "verify_seconds": 0.049719,
+  "create_throughput_mbps": 3.5721659087321327,
+  "extract_throughput_mbps": 3.535370260846523,
+  "rep": 1
+}

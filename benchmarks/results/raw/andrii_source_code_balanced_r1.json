@@ -1,0 +1,16 @@
+{
+  "dataset": "source-code",
+  "file_count": 205,
+  "input_bytes": 7538250,
+  "tool": "ANDRII",
+  "mode": "Balanced",
+  "output_bytes": 5966948,
+  "compression_ratio": 0.20844386959838157,
+  "space_saved_pct": 20.844386959838157,
+  "create_seconds": 9.8297142,
+  "extract_seconds": 4.3057587999999996,
+  "verify_seconds": 0.0073136,
+  "create_throughput_mbps": 0.7313575216306304,
+  "extract_throughput_mbps": 1.6696326360987557,
+  "rep": 1
+}

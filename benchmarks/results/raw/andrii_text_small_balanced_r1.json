@@ -1,0 +1,16 @@
+{
+  "dataset": "text-small",
+  "file_count": 200,
+  "input_bytes": 10485600,
+  "tool": "ANDRII",
+  "mode": "Balanced",
+  "output_bytes": 2115518,
+  "compression_ratio": 0.7982454032196536,
+  "space_saved_pct": 79.82454032196536,
+  "create_seconds": 9.6960363,
+  "extract_seconds": 4.0826346000000004,
+  "verify_seconds": 0.0061336,
+  "create_throughput_mbps": 1.0313335369948415,
+  "extract_throughput_mbps": 2.4493613540896786,
+  "rep": 1
+}
