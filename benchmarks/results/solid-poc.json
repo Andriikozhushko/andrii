@@ -1,0 +1,191 @@
+{
+  "note": "Research PoC. per_file_bytes models the current v2 archive; solid_bytes models a proposed v3 solid stream. In-memory only, no on-disk format change.",
+  "results": [
+    {
+      "dataset": "source-code",
+      "files": 206,
+      "input_bytes": 7548887,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 5966293,
+          "per_file_seconds": 1.1844721,
+          "solid_bytes": 5670431,
+          "solid_seconds": 1.0986264000000001,
+          "improvement_pct": 4.958891559633427
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 5955792,
+          "per_file_seconds": 0.1929669,
+          "solid_bytes": 5577016,
+          "solid_seconds": 1.2120723,
+          "improvement_pct": 6.359792282873544
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 5935403,
+          "per_file_seconds": 6.1937471,
+          "solid_bytes": 5528041,
+          "solid_seconds": 4.7052216,
+          "improvement_pct": 6.863257642320164
+        }
+      ]
+    },
+    {
+      "dataset": "many-small-files",
+      "files": 2000,
+      "input_bytes": 4193000,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 1965017,
+          "per_file_seconds": 10.2923488,
+          "solid_bytes": 1323809,
+          "solid_seconds": 0.3304168,
+          "improvement_pct": 32.6311680764085
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 1692132,
+          "per_file_seconds": 1.82767,
+          "solid_bytes": 1287880,
+          "solid_seconds": 0.700913,
+          "improvement_pct": 23.890098408398398
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 1592384,
+          "per_file_seconds": 39.2764516,
+          "solid_bytes": 883281,
+          "solid_seconds": 4.1279082,
+          "improvement_pct": 44.530904605924206
+        }
+      ]
+    },
+    {
+      "dataset": "text-small",
+      "files": 200,
+      "input_bytes": 10485600,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 2238872,
+          "per_file_seconds": 1.264673,
+          "solid_bytes": 1961360,
+          "solid_seconds": 0.4817044,
+          "improvement_pct": 12.395170425106928
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 2100000,
+          "per_file_seconds": 0.8848944,
+          "solid_bytes": 1486425,
+          "solid_seconds": 0.8759604,
+          "improvement_pct": 29.21785714285714
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 1709210,
+          "per_file_seconds": 17.6340663,
+          "solid_bytes": 747196,
+          "solid_seconds": 7.0867225,
+          "improvement_pct": 56.28413126532141
+        }
+      ]
+    },
+    {
+      "dataset": "mixed-realistic",
+      "files": 327,
+      "input_bytes": 114241599,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 60920477,
+          "per_file_seconds": 5.495348,
+          "solid_bytes": 60630022,
+          "solid_seconds": 12.2550535,
+          "improvement_pct": 0.47677729115613854
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 60530787,
+          "per_file_seconds": 3.6292437,
+          "solid_bytes": 60452857,
+          "solid_seconds": 15.4135368,
+          "improvement_pct": 0.1287444024145934
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 58566181,
+          "per_file_seconds": 66.9991839,
+          "solid_bytes": 44764628,
+          "solid_seconds": 58.0801827,
+          "improvement_pct": 23.56573839089833
+        }
+      ]
+    },
+    {
+      "dataset": "documents-mixed",
+      "files": 10,
+      "input_bytes": 52428800,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 52432300,
+          "per_file_seconds": 0.1026184,
+          "solid_bytes": 52408141,
+          "solid_seconds": 10.3423671,
+          "improvement_pct": 0.04607655967791002
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 52432300,
+          "per_file_seconds": 0.0180486,
+          "solid_bytes": 52408126,
+          "solid_seconds": 10.4217889,
+          "improvement_pct": 0.0461051679975899
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 52432300,
+          "per_file_seconds": 0.0165624,
+          "solid_bytes": 26207749,
+          "solid_seconds": 12.928199,
+          "improvement_pct": 50.016022566242555
+        }
+      ]
+    },
+    {
+      "dataset": "incompressible-media-like",
+      "files": 7,
+      "input_bytes": 105906176,
+      "modes": [
+        {
+          "mode": "Fast",
+          "per_file_bytes": 105909966,
+          "per_file_seconds": 0.1054507,
+          "solid_bytes": 105912399,
+          "solid_seconds": 21.0596654,
+          "improvement_pct": -0.0022972342376137433
+        },
+        {
+          "mode": "Balanced",
+          "per_file_bytes": 105909966,
+          "per_file_seconds": 0.0272467,
+          "solid_bytes": 105388128,
+          "solid_seconds": 21.0434449,
+          "improvement_pct": 0.4927185039413584
+        },
+        {
+          "mode": "Maximum",
+          "per_file_bytes": 105909966,
+          "per_file_seconds": 0.0474473,
+          "solid_bytes": 105388127,
+          "solid_seconds": 64.4357045,
+          "improvement_pct": 0.4927194481395669
+        }
+      ]
+    }
+  ]
+}
