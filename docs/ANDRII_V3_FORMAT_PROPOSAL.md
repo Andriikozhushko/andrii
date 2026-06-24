@@ -1,8 +1,20 @@
 # ANDRII v3 Format Proposal — Solid Groups (Maximum mode)
 
-**Status:** Proposal / design only. **Not implemented. Not the default writer.**
+**Status:** ✅ **Implemented.** Maximum mode writes v3 solid groups; Fast/Balanced
+remain v2. The reader opens v1/v2/v3. See [`ANDRII_FORMAT_SPEC.md`](ANDRII_FORMAT_SPEC.md) §11
+for the as-built spec, `crates/andrii-core/tests/v3_solid.rs` for the test suite,
+and §4b of [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md) for measured v3-vs-v2 gains.
 **Companion to:** [`SOLID_MODE_FEASIBILITY.md`](SOLID_MODE_FEASIBILITY.md)
 **Evidence:** `benchmarks/results/solid-poc.json`
+
+> **As-built deltas from this proposal.** (1) Group AEAD chunks use the same AAD
+> as v2 file regions — `chunk_index ‖ last_flag` (not empty AAD) — so ordering and
+> truncation are authenticated per group. (2) A group whose concatenation is
+> incompressible is stored raw (`GroupEntry.stored_raw`) so a group is never larger
+> than its plaintext. (3) Eligibility: a file is grouped when it is compressible
+> (same `decide_level` policy) **and** ≤ `GROUP_TARGET` (16 MiB); larger files stay
+> per-file. (4) Empty files are grouped (zero-length slice). Everything else matches
+> the design below.
 
 This document specifies a v3 archive format that adds **solid group compression**
 for Maximum mode while preserving every existing security and compatibility

@@ -2,21 +2,35 @@ use std::io::{Read, Write};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ArchiveError;
-use super::entry::FileEntry;
+use super::entry::{FileEntry, GroupEntry};
 
 /// Archive magic bytes.
 pub const MAGIC: &[u8; 6] = b"ANDRII";
 
-/// Current format version written by this build.
+/// Current (maximum) format version this build can write and read.
 ///
 /// - v1: each file stored as one compressed+encrypted block (whole-file buffered).
 /// - v2: each file stored as a sequence of independently-sealed 1 MiB chunks, so
-///   writing/reading holds ~one chunk regardless of file size. The reader still
-///   opens v1 archives.
-pub const FORMAT_VERSION: u16 = 2;
+///   writing/reading holds ~one chunk regardless of file size.
+/// - v3: **solid groups for Maximum mode only.** Compressible files are bucketed
+///   into bounded groups; each group is concatenated, compressed as one zstd
+///   stream, then chunk-AEAD'd exactly like a v2 file region. Incompressible files
+///   stay per-file (v2-style) regions in the same archive. Fast/Balanced continue
+///   to write v2. The reader opens v1, v2 and v3 archives.
+///
+/// `FixedHeader::from_bytes` rejects any version greater than this constant, so
+/// older builds fail-closed on newer archives (never mis-parse).
+pub const FORMAT_VERSION: u16 = 3;
 
-/// v2 plaintext chunk size (1 MiB). Bounds peak memory during create/extract.
+/// v2/v3 plaintext chunk size (1 MiB). Bounds peak memory during create/extract.
 pub const CHUNK_SIZE: usize = 1 << 20;
+
+/// v3 solid-group target: the maximum *uncompressed* plaintext bundled into one
+/// group (16 MiB). Bounds peak extract memory (one inflated group) and limits the
+/// corruption blast radius to a single group, while still capturing most of the
+/// cross-file dictionary gain. A compressible file larger than this is stored as
+/// its own per-file region (large files already compress well on their own).
+pub const GROUP_TARGET: u64 = 16 * 1024 * 1024;
 
 /// Footer magic bytes.
 pub const FOOTER_MAGIC: &[u8; 4] = b"ENDR";
@@ -117,6 +131,11 @@ pub struct EncryptedHeader {
     #[serde(default)]
     pub extra: serde_json::Value,
     pub entries: Vec<FileEntry>,
+    /// v3: one record per solid group. Empty (defaults) for v1/v2 archives, where
+    /// every file is its own per-file region. A `FileEntry` with `group_id ==
+    /// Some(g)` refers to `groups[g]`.
+    #[serde(default)]
+    pub groups: Vec<GroupEntry>,
 }
 
 impl EncryptedHeader {

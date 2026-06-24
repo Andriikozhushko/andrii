@@ -14,7 +14,7 @@ use andrii_crypto::{
 use crate::error::ArchiveError;
 use crate::format::{
     entry::{FileEntry, FileEntrySummary},
-    header::{EncryptedHeader, FixedHeader, CHUNK_SIZE, FIXED_HEADER_SIZE},
+    header::{EncryptedHeader, FixedHeader, CHUNK_SIZE, FIXED_HEADER_SIZE, GROUP_TARGET},
 };
 
 /// Information about an opened archive.
@@ -94,8 +94,18 @@ impl ArchiveReader {
     pub fn info(&self) -> ArchiveInfo {
         let entries = self.encrypted_header.entries.clone();
         let total_original_size = entries.iter().map(|e| e.original_size).sum();
-        let total_compressed_size: u64 =
-            entries.iter().map(|e| e.compressed_encrypted_size.saturating_sub(16)).sum();
+        // Prefer the recorded compressed payload (v2 per-file, v3 grouped share);
+        // v1 only has the on-disk region size, so approximate by removing one tag.
+        let total_compressed_size: u64 = entries
+            .iter()
+            .map(|e| {
+                if e.compressed_size > 0 {
+                    e.compressed_size
+                } else {
+                    e.compressed_encrypted_size.saturating_sub(16)
+                }
+            })
+            .sum();
 
         ArchiveInfo {
             archive_name: self.encrypted_header.archive_name.clone(),
@@ -127,22 +137,158 @@ impl ArchiveReader {
     }
 
     /// Extract all files to the given output directory.
+    ///
+    /// For v3 archives, each solid group is inflated **once** and all its member
+    /// files are sliced out of the single decompressed buffer — more efficient
+    /// than re-inflating per file. Per-file (ungrouped) entries use the v1/v2 path.
     pub fn extract_all(&self, output_dir: &Path) -> Result<Vec<PathBuf>, ArchiveError> {
         let entries = self.encrypted_header.entries.clone();
         let mut extracted = Vec::with_capacity(entries.len());
-        for entry in &entries {
-            let path = self.extract_entry(entry, output_dir)?;
-            extracted.push(path);
+
+        if self.fixed_header.version >= 3 && !self.encrypted_header.groups.is_empty() {
+            // Inflate each group once, slice out every member, then handle the
+            // remaining ungrouped (per-file) entries normally.
+            use std::collections::BTreeMap;
+            let mut by_group: BTreeMap<u32, Vec<&FileEntry>> = BTreeMap::new();
+            for e in &entries {
+                if let Some(g) = e.group_id {
+                    by_group.entry(g).or_default().push(e);
+                }
+            }
+            for (gid, members) in by_group {
+                let plain = self.inflate_group(gid)?;
+                for entry in members {
+                    let path = self.write_group_member(entry, &plain, output_dir)?;
+                    extracted.push(path);
+                }
+            }
+            for entry in &entries {
+                if entry.group_id.is_none() {
+                    extracted.push(self.extract_entry(entry, output_dir)?);
+                }
+            }
+        } else {
+            for entry in &entries {
+                extracted.push(self.extract_entry(entry, output_dir)?);
+            }
         }
         Ok(extracted)
     }
 
     fn extract_entry(&self, entry: &FileEntry, output_dir: &Path) -> Result<PathBuf, ArchiveError> {
-        if self.fixed_header.version >= 2 {
+        if let Some(gid) = entry.group_id {
+            // v3 grouped file: inflate its group, slice, verify, write.
+            let plain = self.inflate_group(gid)?;
+            self.write_group_member(entry, &plain, output_dir)
+        } else if self.fixed_header.version >= 2 {
             self.extract_entry_v2(entry, output_dir)
         } else {
             self.extract_entry_v1(entry, output_dir)
         }
+    }
+
+    /// v3: decrypt and inflate one solid group's chunks into its full
+    /// decompressed plaintext (bounded by the group's `uncompressed_size`, which
+    /// the writer caps at `GROUP_TARGET`). Fail-closed: any chunk that fails AEAD
+    /// authentication, or a decompression failure, aborts before any file is
+    /// written. The chunk AAD (`chunk_index ‖ last_flag`) authenticates ordering
+    /// and truncation, exactly as for a v2 file region.
+    fn inflate_group(&self, group_id: u32) -> Result<Zeroizing<Vec<u8>>, ArchiveError> {
+        let group = self
+            .encrypted_header
+            .groups
+            .iter()
+            .find(|g| g.group_id == group_id)
+            .ok_or_else(|| ArchiveError::Corrupted(format!("Missing group {group_id}")))?;
+
+        let base16 = group
+            .decode_base_nonce()
+            .map_err(|e| ArchiveError::Format(format!("Invalid group {group_id} nonce: {e}")))?;
+        let abs_offset = self.data_section_start + group.data_offset;
+
+        let mut reader = BufReader::new(File::open(&self.path)?);
+        reader.seek(SeekFrom::Start(abs_offset))?;
+
+        // Reassemble the compressed (or raw) stream from its sealed chunks.
+        let mut stream: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::with_capacity(
+            group.compressed_size.min(GROUP_TARGET) as usize,
+        ));
+        for i in 0..group.chunk_count {
+            let mut len_buf = [0u8; 4];
+            reader.read_exact(&mut len_buf)?;
+            let sealed_len = u32::from_le_bytes(len_buf) as usize;
+            let mut sealed = vec![0u8; sealed_len];
+            reader.read_exact(&mut sealed)?;
+
+            let mut nonce = [0u8; 24];
+            nonce[..16].copy_from_slice(&base16);
+            nonce[16..24].copy_from_slice(&i.to_be_bytes());
+            let mut aad = [0u8; 9];
+            aad[..8].copy_from_slice(&i.to_be_bytes());
+            aad[8] = (i + 1 == group.chunk_count) as u8;
+
+            let payload = decrypt(&self.master_key, &nonce, &sealed, &aad).map_err(|_| {
+                ArchiveError::Corrupted(format!("Group {group_id} authentication failed"))
+            })?;
+            stream.extend_from_slice(&payload);
+        }
+
+        let plain: Zeroizing<Vec<u8>> = if group.stored_raw {
+            stream
+        } else {
+            Zeroizing::new(decompress(&stream, Some(group.uncompressed_size as usize))?)
+        };
+
+        // Length sanity: the inflated group must match its recorded plaintext size
+        // so member offset/length slicing is always in-bounds (fail-closed).
+        if plain.len() as u64 != group.uncompressed_size {
+            return Err(ArchiveError::Corrupted(format!(
+                "Group {group_id} size mismatch: got {}, expected {}",
+                plain.len(),
+                group.uncompressed_size
+            )));
+        }
+        Ok(plain)
+    }
+
+    /// v3: slice one member file out of its already-inflated group plaintext,
+    /// verify its per-file BLAKE3 (fail-closed), and atomically write it.
+    fn write_group_member(
+        &self,
+        entry: &FileEntry,
+        group_plain: &[u8],
+        output_dir: &Path,
+    ) -> Result<PathBuf, ArchiveError> {
+        let start = entry.group_offset as usize;
+        let end = start
+            .checked_add(entry.original_size as usize)
+            .filter(|&e| e <= group_plain.len())
+            .ok_or_else(|| {
+                ArchiveError::Corrupted(format!("File {} out of group bounds", entry.path))
+            })?;
+        let content = &group_plain[start..end];
+
+        let expected_hash = entry.decode_hash()?;
+        // Fail-closed: never write content that doesn't match its per-file hash.
+        if hash_bytes(content) != expected_hash {
+            return Err(ArchiveError::IntegrityFailed(entry.path.clone()));
+        }
+
+        let out_path = output_dir.join(&entry.path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let tmp_path = out_path.with_extension(format!("andrii-x-{}.tmp", std::process::id()));
+        if let Err(e) = fs::write(&tmp_path, content) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(ArchiveError::Io(e));
+        }
+        fs::rename(&tmp_path, &out_path).map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            ArchiveError::Io(e)
+        })?;
+        restore_mode(&out_path, entry.unix_mode);
+        Ok(out_path)
     }
 
     /// v1: a single compressed+encrypted block per file (whole file buffered).

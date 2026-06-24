@@ -45,6 +45,22 @@ pub struct FileEntry {
     /// `compressed_encrypted_size`).
     #[serde(default)]
     pub compressed_size: u64,
+
+    /// v3: when `Some(g)`, this file lives inside solid group `g` (see
+    /// [`GroupEntry`]) rather than its own data-section region. `None` (the
+    /// default) means a per-file region, identical to v1/v2.
+    ///
+    /// For grouped files, `data_offset`, `content_nonce`, `chunk_count` and
+    /// `compressed_encrypted_size` are not used for content location (they are 0
+    /// / empty); the file is located via the group's stream plus `group_offset`.
+    #[serde(default)]
+    pub group_id: Option<u32>,
+
+    /// v3: byte offset of this file within its group's *decompressed* plaintext.
+    /// Only meaningful when `group_id` is `Some`. The file occupies
+    /// `[group_offset .. group_offset + original_size]` of the inflated group.
+    #[serde(default)]
+    pub group_offset: u64,
 }
 
 impl FileEntry {
@@ -80,6 +96,59 @@ impl FileEntry {
     /// Decode the BLAKE3 hash from hex.
     pub fn decode_hash(&self) -> Result<[u8; 32], hex::FromHexError> {
         andrii_crypto::hash_from_hex(&self.blake3_hash)
+    }
+}
+
+/// Metadata for a single v3 solid group: a bundle of compressible files
+/// concatenated, compressed as one zstd stream, then split into 1 MiB chunks and
+/// sealed exactly like a v2 file region (nonce = base16 ‖ chunk_index,
+/// AAD = chunk_index ‖ last_flag). Stored in the encrypted header.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupEntry {
+    /// 0-based group id, matching `FileEntry::group_id`.
+    pub group_id: u32,
+
+    /// Byte offset of the group's first chunk within the data section.
+    pub data_offset: u64,
+
+    /// Number of 1 MiB chunks the compressed stream is split into.
+    pub chunk_count: u64,
+
+    /// On-disk bytes of the group region (Σ chunk ciphertext + 4-byte length
+    /// prefixes + AEAD tags). This is the region length in the data section.
+    pub stored_size: u64,
+
+    /// Base64url-encoded 16-byte base nonce; the trailing 8 bytes are the
+    /// per-chunk counter, identical to a v2 file region.
+    pub content_nonce: String,
+
+    /// Post-zstd, pre-encryption size of the group stream — for honest ratio.
+    pub compressed_size: u64,
+
+    /// Σ original (uncompressed) sizes of the files in this group. Bounded by
+    /// [`super::header::GROUP_TARGET`] and used as the inflate capacity hint.
+    pub uncompressed_size: u64,
+
+    /// True when the concatenated stream was stored without zstd (the group turned
+    /// out incompressible, so compressing would only add overhead). Slicing is
+    /// unchanged — the inflated bytes equal the raw concatenation.
+    #[serde(default)]
+    pub stored_raw: bool,
+}
+
+impl GroupEntry {
+    /// Decode the 16-byte base nonce from base64url.
+    pub fn decode_base_nonce(&self) -> Result<[u8; 16], String> {
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        let bytes = URL_SAFE_NO_PAD
+            .decode(&self.content_nonce)
+            .map_err(|e| format!("base64 decode error: {e}"))?;
+        if bytes.len() != 16 {
+            return Err(format!("base nonce length {} != 16", bytes.len()));
+        }
+        let mut nonce = [0u8; 16];
+        nonce.copy_from_slice(&bytes);
+        Ok(nonce)
     }
 }
 

@@ -38,6 +38,7 @@ fn make_archive(
         compression,
         output_path: output.clone(),
         progress_callback: None,
+        force_legacy_v2: false,
     };
     ArchiveWriter::new(opts)
         .create(files)
@@ -457,8 +458,8 @@ fn verify_rejects_unsupported_version() {
 
     let err = verify_archive(&archive).unwrap_err();
     assert!(
-        matches!(err, ArchiveError::UnsupportedVersion(255, 2)),
-        "expected UnsupportedVersion(255, 2), got: {err:?}"
+        matches!(err, ArchiveError::UnsupportedVersion(255, 3)),
+        "expected UnsupportedVersion(255, 3), got: {err:?}"
     );
 }
 
@@ -808,6 +809,7 @@ fn progress_callback_reports_phases_and_bytes() {
         progress_callback: Some(Box::new(move |p: &andrii_core::Progress| {
             log2.lock().unwrap().push((p.phase.as_str().to_string(), p.bytes_done, p.bytes_total));
         })),
+        force_legacy_v2: false,
     };
     ArchiveWriter::new(opts).create(&files).unwrap();
 

@@ -32,6 +32,7 @@ mod tests {
             compression: CompressionLevel::Fast,
             output_path: output.clone(),
             progress_callback: None,
+            force_legacy_v2: false,
         };
         let writer = ArchiveWriter::new(opts);
         writer.create(&[file1, file2]).unwrap();
@@ -144,6 +145,8 @@ mod tests {
                 chunk_count: 0,   // v1 entries lack these (serde default)
                 stored_raw: false,
                 compressed_size: 0,
+                group_id: None,
+                group_offset: 0,
             });
             offset += enc.len() as u64;
             data_section.extend_from_slice(&enc);
@@ -157,6 +160,7 @@ mod tests {
             argon2_params: Argon2ParamsJson { m_cost: 65536, t_cost: 3, p_cost: 4 },
             extra: serde_json::Value::Object(Default::default()),
             entries,
+            groups: Vec::new(),
         };
         let json = header.to_json().unwrap();
         let hnonce = generate_nonce().unwrap();

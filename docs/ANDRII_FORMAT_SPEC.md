@@ -2,9 +2,13 @@
 
 **Format Name:** ANDRII Secure Archive  
 **File Extension:** `.andrii`  
-**Current Version:** 1  
-**Document Version:** 1.0  
+**Current Version:** 3 (writer emits v2 for Fast/Balanced, v3 for Maximum; reader opens v1/v2/v3)  
+**Document Version:** 1.2  
 **Status:** Implemented
+
+> **Note.** Sections §2–§8 describe the v1 baseline. Chunked streaming (v2) and
+> solid groups (v3) are additive and documented in **§11**. The reader selects
+> the read path from `FixedHeader.version`; v1, v2 and v3 archives all open.
 
 ---
 
@@ -334,7 +338,9 @@ An older parser encountering a newer version MUST refuse to open the archive wit
 
 | Version | Description |
 |---------|-------------|
-| 1 | Initial format: XChaCha20-Poly1305, Argon2id, Zstd, JSON header |
+| 1 | Initial format: XChaCha20-Poly1305, Argon2id, Zstd, JSON header. One compressed+encrypted block per file (whole-file buffered). |
+| 2 | Per-file **chunked streaming**: each file is a sequence of independently-sealed 1 MiB chunks (nonce = base16 ‖ chunk_index, AAD = chunk_index ‖ last_flag). Bounds create/extract memory to ~one chunk. Random-access per file. |
+| 3 | **Solid groups for Maximum mode only.** Compressible, small-enough files are bundled into ≤16 MiB groups compressed as one zstd stream; incompressible/large files stay per-file (v2-style). Fast/Balanced still write v2. Per-file BLAKE3 integrity retained. See §11. |
 
 ---
 
@@ -367,3 +373,78 @@ The Poly1305 authentication tag provides integrity. Any modification to the ciph
 ### 10.4 Padding
 
 Individual file blocks are not padded. An adversary can observe the distribution of encrypted block sizes, which may reveal file count and approximate sizes. Padding is reserved for a future "stealth" mode via the flags field.
+
+---
+
+## 11. Chunked Streaming (v2) and Solid Groups (v3)
+
+Both v2 and v3 reuse the v1 framing — `[FixedHeader][EncryptedHeader][Data section][Footer]` — the same crypto primitives (XChaCha20-Poly1305, Argon2id, BLAKE3), and the same encrypted JSON header envelope. Only the **data section** and a few **additive, `serde(default)` header fields** change. Older fields keep their meaning; new fields default to `0` / `false` / `null` / `[]`, so a v3 reader transparently reads v1 and v2.
+
+### 11.1 v2 — per-file chunked regions
+
+Each file's content is split into 1 MiB plaintext chunks, each sealed independently:
+
+```
+chunk_nonce  = base16 ‖ chunk_index (u64 BE)          # 16 + 8 = 24 bytes
+chunk_aad    = chunk_index (u64 BE) ‖ last_flag (u8)  # 9 bytes
+sealed_chunk = XChaCha20-Poly1305(key, chunk_nonce, zstd(chunk)?, chunk_aad)
+on-disk      = u32_le(len(sealed_chunk)) ‖ sealed_chunk     # length-prefixed
+```
+
+The AAD binds chunk **ordering** and **truncation** (the last chunk's `last_flag = 1`). `FileEntry` gains: `chunk_count` (chunks in this file), `stored_raw` (content stored without zstd — already-compressed data), and `compressed_size` (post-zstd, pre-encryption payload, for honest ratio display). Create and extract hold ~one chunk at a time regardless of file size.
+
+### 11.2 v3 — solid groups (Maximum mode only)
+
+The writer emits v3 **only** when the user selects Maximum *and* grouping is worthwhile (≥1 group of ≥2 files); otherwise it writes v2. Compressible files no larger than `GROUP_TARGET` (16 MiB) are bucketed (sorted by path for directory locality, greedy-filled to ≤16 MiB uncompressed). Each group is:
+
+```
+plaintext  = file₀ ‖ file₁ ‖ … (concatenated, in bucket order)
+stream     = zstd(plaintext, level 19)        # or raw plaintext if incompressible
+            → split into 1 MiB chunks, sealed exactly as a v2 region
+```
+
+Incompressible (media/archive/package) and large files are **not** grouped — they remain v2-style per-file regions in the same archive.
+
+#### New `GroupEntry` (one per group, in the encrypted header)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `group_id` | u32 | 0-based group id, matched by `FileEntry.group_id` |
+| `data_offset` | u64 | Offset of the group's first chunk in the data section |
+| `chunk_count` | u64 | Number of 1 MiB chunks in the group stream |
+| `stored_size` | u64 | On-disk region bytes (Σ ciphertext + length prefixes + tags) |
+| `content_nonce` | string | Base64url 16-byte base nonce (chunk counter appended) |
+| `compressed_size` | u64 | Post-zstd, pre-encryption stream size |
+| `uncompressed_size` | u64 | Σ original member sizes (≤ `GROUP_TARGET`); inflate capacity bound |
+| `stored_raw` | bool | True when the group was stored without zstd (incompressible) |
+
+#### Additive `FileEntry` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `group_id` | u32? | `Some(g)` → file lives in group `g`; `None` (default) → per-file region |
+| `group_offset` | u64 | Byte offset of this file within the group's **decompressed** plaintext |
+
+A grouped file is located by: inflate `group_id`'s stream → slice `[group_offset .. group_offset + original_size]` → verify `blake3_hash`. `blake3_hash` and `original_size` are unchanged from v2, so **per-file fail-closed integrity is identical**.
+
+### 11.3 Integrity & blast radius
+
+- **Chunk ordering/truncation** — AEAD AAD = `chunk_index ‖ last_flag`, per group (same mechanism as a v2 file).
+- **Per-file integrity** — each file still carries its own BLAKE3; after a group is decrypted and inflated, every member's bytes are re-hashed and checked. Mismatch → no extraction.
+- **Fail closed** — group decrypt failure, decompression failure, an inflated-size mismatch, or any per-file hash mismatch aborts before a single byte is written (atomic temp-file + rename).
+- **Bounded blast radius** — corruption affects only the one group it occurs in, not the whole archive. This is the single behavioral change versus v2 (a corrupt chunk fails its whole group rather than one file) — an explicit, bounded tradeoff of Maximum mode.
+
+### 11.4 Extraction cost
+
+- **Extract all** — each group is inflated once and all its members are sliced out of the single decompressed buffer (more efficient than v2 for grouped files).
+- **Extract selected** — only the groups containing selected files are decrypted/inflated; unrelated groups are never touched. The tradeoff: selecting one file in a group still inflates that whole group (≤16 MiB). Fast/Balanced (v2) keep instant per-file random access.
+
+### 11.5 Compatibility matrix
+
+| Reader → Writer | v1 | v2 | v3 |
+|---|---|---|---|
+| **v3 reader (this build)** | ✅ | ✅ | ✅ |
+| v2 reader (older) | ✅ | ✅ | ❌ rejects via version check (`UnsupportedVersion`) |
+| v1 reader (oldest) | ✅ | ❌ | ❌ |
+
+`FixedHeader::from_bytes` rejects any `version` greater than the build's `FORMAT_VERSION`, so older builds fail closed on newer archives — they never mis-parse.

@@ -115,6 +115,7 @@ pub async fn create_archive(
                     let _ = app_clone.emit("archive-progress", ProgressEvent::from_progress(p));
                 }
             })),
+            force_legacy_v2: false,
         };
 
         let writer = ArchiveWriter::new(opts);

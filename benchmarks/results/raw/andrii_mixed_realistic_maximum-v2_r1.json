@@ -1,0 +1,16 @@
+{
+  "dataset": "mixed-realistic",
+  "file_count": 327,
+  "input_bytes": 114241599,
+  "tool": "ANDRII",
+  "mode": "Maximum-v2",
+  "output_bytes": 58601957,
+  "compression_ratio": 0.4870348672203021,
+  "space_saved_pct": 48.703486722030206,
+  "create_seconds": 93.8775297,
+  "extract_seconds": 18.5310033,
+  "verify_seconds": 0.0307938,
+  "create_throughput_mbps": 1.1605469293839112,
+  "extract_throughput_mbps": 5.879297362786716,
+  "rep": 1
+}

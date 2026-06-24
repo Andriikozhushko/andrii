@@ -65,7 +65,7 @@ pub fn verify_archive(archive_path: &Path) -> Result<VerifyResult, ArchiveError>
         Err(e) => return Err(e),
     };
 
-    let version_supported = matches!(fixed_header.version, 1 | 2);
+    let version_supported = matches!(fixed_header.version, 1 | 2 | 3);
 
     if !version_supported {
         return Ok(VerifyResult {
