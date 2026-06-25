@@ -1,0 +1,205 @@
+name: release-build
+
+# ANDRII cross-platform release pipeline.
+#
+# Two modes:
+#   1. Validation (pull_request / push to default branch) — runs library tests,
+#      builds the frontend, sanity-checks the Tauri config, and exercises the
+#      artifact verifier's missing-artifact detection. Does NOT build installers.
+#   2. Release build (tag v* / workflow_dispatch) — builds the full Tauri bundle
+#      matrix (Windows MSI+NSIS, Linux AppImage+DEB), verifies artifacts, and
+#      uploads them. On tag builds only, a draft GitHub Release is created with
+#      all artifacts + a combined SHA256SUMS.txt. workflow_dispatch never
+#      publishes a public release — artifacts are available as Actions artifacts.
+
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20"
+  RUST_VERSION: "stable"
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Validation — fast, runs on PRs and default-branch pushes.
+  # ─────────────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate (tests + frontend + config)
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type != 'tag')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Setup Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust tests (workspace, excluding Tauri app crate)
+        run: cargo test --workspace --exclude andrii-app --locked
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Tauri config sanity
+        run: node -e "const c=require('./src-tauri/tauri.conf.json'); if(c.version!=='1.0.0')throw new Error('unexpected version '+c.version); if(!c.bundle.fileAssociations?.some(f=>f.mimeType==='application/x-andrii-archive'))throw new Error('missing .andrii mime'); console.log('tauri config OK', c.bundle.targets);"
+
+      - name: Verify missing-artifact detection (controlled case)
+        # Confirms the verifier correctly FAILS when expected artifacts are absent.
+        run: node scripts/verify-release-artifacts.mjs --platform windows --dir /tmp/empty --expect-missing
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Release build matrix — tag pushes and manual dispatch.
+  # ─────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # Note: no `needs: validate` — validate is skipped on tag/dispatch triggers,
+    # and a skipped dependency would skip this job too. The build job runs its
+    # own tests on both OSes before bundling.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact-name: artifacts-windows
+          - os: ubuntu-22.04
+            platform: linux
+            artifact-name: artifacts-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Setup Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux build dependencies (Tauri / WebKitGTK 4.1)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            file \
+            build-essential \
+            pkg-config
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust tests (workspace, excluding Tauri app crate)
+        run: cargo test --workspace --exclude andrii-app --locked
+
+      - name: Build Tauri bundles
+        run: npm run tauri build
+
+      - name: Verify artifacts + generate per-platform checksums
+        run: node scripts/verify-release-artifacts.mjs --platform ${{ matrix.platform }}
+
+      - name: Locate bundle directory
+        id: bundle
+        shell: bash
+        run: echo "dir=target/release/bundle" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            ${{ steps.bundle.outputs.dir }}/**/*.exe
+            ${{ steps.bundle.outputs.dir }}/**/*.msi
+            ${{ steps.bundle.outputs.dir }}/**/*.deb
+            ${{ steps.bundle.outputs.dir }}/**/*.AppImage
+            ${{ steps.bundle.outputs.dir }}/**/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Release — draft GitHub Release with combined checksums. Tag builds only.
+  # Never runs on workflow_dispatch (no public release from manual runs).
+  # ─────────────────────────────────────────────────────────────────────────
+  release:
+    name: Draft release (checksums + assets)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded
+          merge-multiple: true
+
+      - name: Flatten artifacts into a single release directory
+        run: |
+          mkdir -p release
+          find downloaded -type f \( \
+            -name '*.exe' -o \
+            -name '*.msi' -o \
+            -name '*.AppImage' -o \
+            -name '*.deb' \
+          \) -exec cp {} release/ \;
+          ls -la release/
+
+      - name: Verify all four artifacts + write combined SHA256SUMS.txt
+        run: node scripts/verify-release-artifacts.mjs --platform all --dir release --out release/SHA256SUMS.txt
+
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ANDRII ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
