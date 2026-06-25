@@ -112,6 +112,41 @@ jobs:
       - name: Cargo cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Disable unrelated Microsoft apt sources on hosted runners
+        # ANDRII does not require the Azure CLI or Microsoft Ubuntu product
+        # repositories. GitHub-hosted ubuntu-22.04 images include them, and
+        # transient outages (e.g. HTTP 403 from packages.microsoft.com) can abort
+        # `apt-get update` and block the Ubuntu package installation that ANDRII
+        # actually needs. This step temporarily moves only the affected
+        # third-party Microsoft source files aside on the ephemeral runner so the
+        # official Ubuntu mirrors — which ANDRII's dependencies come from — update
+        # cleanly. Official Ubuntu sources and any unrelated third-party sources
+        # are left untouched. No insecure apt flags (AllowInsecureRepositories,
+        # trusted=yes) are used and apt-get update is never error-suppressed.
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          disabled_dir="/etc/apt/sources.list.d/andrii-ci-disabled"
+          mkdir -p "$disabled_dir"
+          moved=0
+          # Scan both classic .list and deb822 .sources formats, including the
+          # main sources.list, for the two known Microsoft source URLs.
+          shopt -s nullglob
+          for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            [ -f "$f" ] || continue
+            if grep -Eq 'packages\.microsoft\.com/repos/azure-cli|packages\.microsoft\.com/ubuntu/22\.04/prod' "$f"; then
+              echo "Disabling Microsoft apt source: $f"
+              mv "$f" "$disabled_dir/"
+              moved=$((moved + 1))
+            fi
+          done
+          if [ "$moved" -eq 0 ]; then
+            echo "No Microsoft apt sources found; nothing disabled."
+          else
+            echo "Disabled $moved Microsoft apt source file(s) into $disabled_dir"
+          fi
+
       - name: Install Linux build dependencies (Tauri / WebKitGTK 4.1)
         if: matrix.platform == 'linux'
         run: |
