@@ -58,7 +58,7 @@ jobs:
         run: npm ci
 
       - name: Rust tests (workspace, excluding Tauri app crate)
-        run: cargo test --workspace --exclude andrii-app --locked
+        run: cargo test --workspace --exclude andrii-app
 
       - name: Frontend build
         run: npm run build
@@ -126,7 +126,7 @@ jobs:
         run: npm ci
 
       - name: Rust tests (workspace, excluding Tauri app crate)
-        run: cargo test --workspace --exclude andrii-app --locked
+        run: cargo test --workspace --exclude andrii-app
 
       - name: Build Tauri bundles
         run: npm run tauri build
