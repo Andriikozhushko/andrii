@@ -128,7 +128,9 @@ jobs:
         run: |
           set -euo pipefail
           disabled_dir="/etc/apt/sources.list.d/andrii-ci-disabled"
-          mkdir -p "$disabled_dir"
+          # Source files under /etc/apt are root-owned; the runner user needs
+          # sudo to create the disabled directory and move files aside.
+          sudo mkdir -p "$disabled_dir"
           moved=0
           # Scan both classic .list and deb822 .sources formats, including the
           # main sources.list, for the two known Microsoft source URLs.
@@ -137,7 +139,7 @@ jobs:
             [ -f "$f" ] || continue
             if grep -Eq 'packages\.microsoft\.com/repos/azure-cli|packages\.microsoft\.com/ubuntu/22\.04/prod' "$f"; then
               echo "Disabling Microsoft apt source: $f"
-              mv "$f" "$disabled_dir/"
+              sudo mv "$f" "$disabled_dir/"
               moved=$((moved + 1))
             fi
           done
