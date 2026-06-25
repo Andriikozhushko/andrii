@@ -63,17 +63,25 @@ Do **not** push the tag yet — pushing triggers the release workflow.
 ## 6. GitHub Release workflow
 
 1. Confirm `.github/workflows/release-build.yml` is on the default branch.
-2. Push the tag: `git push origin v1.0.0`.
-3. Watch the **release-build** workflow on GitHub Actions.
+2. **Test the pipeline first** by triggering `workflow_dispatch` on the
+   workflow. This runs both build jobs (native verify → stage branded names →
+   branded verify → per-platform checksums → upload) but does **not** create a
+   release. Confirm the staged artifacts use the exact branded public names:
+   `ANDRII_1.0.0_x64-setup.exe`, `ANDRII_1.0.0_x64_en-US.msi`,
+   `ANDRII_1.0.0_x64.AppImage`, `ANDRII_1.0.0_amd64.deb`.
+3. Push the tag: `git push origin v1.0.0`.
+4. Watch the **release-build** workflow on GitHub Actions.
    - `Build (windows-latest)` and `Build (ubuntu-22.04)` must both go green.
-   - The `release` job creates a **draft** release with all four artifacts +
-     `SHA256SUMS.txt`.
-4. **Manual action required (user):** review the draft release, then either
+   - The `release` job flattens only the branded `ANDRII_*` files, verifies all
+     four in branded mode, writes a combined `SHA256SUMS.txt` referencing only
+     the branded names, and creates a **draft** release with those five assets.
+5. **Manual action required (user):** review the draft release, then either
    publish it or discard it. Publishing is the one step that must not happen
    silently.
 
 > `workflow_dispatch` runs the same builds but does **not** create a release —
-> use it to test the pipeline without publishing.
+> use it to test the pipeline without publishing. Run it **before** pushing the
+> public `v1.0.0` tag.
 
 ## 7. Download and validate Linux artifacts (user manual action)
 
@@ -94,7 +102,7 @@ All files must verify `OK`.
 - Double-click a `.andrii` file → opens ANDRII.
 
 ### Linux (.deb)
-- `sudo apt-get install -y ./andrii-app_1.0.0_amd64.deb`
+- `sudo apt-get install -y ./ANDRII_1.0.0_amd64.deb`
 - Launch from menu; create/add/extract round-trip.
 - Double-click a `.andrii` file → opens ANDRII (may require re-login or
   `update-desktop-database`).

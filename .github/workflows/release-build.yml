@@ -7,9 +7,13 @@ name: release-build
 #      builds the frontend, sanity-checks the Tauri config, and exercises the
 #      artifact verifier's missing-artifact detection. Does NOT build installers.
 #   2. Release build (tag v* / workflow_dispatch) — builds the full Tauri bundle
-#      matrix (Windows MSI+NSIS, Linux AppImage+DEB), verifies artifacts, and
-#      uploads them. On tag builds only, a draft GitHub Release is created with
-#      all artifacts + a combined SHA256SUMS.txt. workflow_dispatch never
+#      matrix (Windows MSI+NSIS, Linux AppImage+DEB), verifies the native
+#      artifacts, then stages them under the exact public release filenames
+#      (ANDRII_1.0.0_x64-setup.exe, ANDRII_1.0.0_x64_en-US.msi,
+#      ANDRII_1.0.0_x64.AppImage, ANDRII_1.0.0_amd64.deb) and uploads the
+#      branded staged files. On tag builds only, a draft GitHub Release is
+#      created with the four branded artifacts + a combined SHA256SUMS.txt that
+#      references only the branded final names. workflow_dispatch never
 #      publishes a public release — artifacts are available as Actions artifacts.
 
 on:
@@ -131,24 +135,43 @@ jobs:
       - name: Build Tauri bundles
         run: npm run tauri build
 
-      - name: Verify artifacts + generate per-platform checksums
+      - name: Verify native Tauri artifacts (pre-staging)
+        # Validates Tauri's native output names exist and are non-zero, before
+        # any renaming. Native mode matches by extension pattern.
         run: node scripts/verify-release-artifacts.mjs --platform ${{ matrix.platform }}
 
-      - name: Locate bundle directory
-        id: bundle
+      - name: Stage branded release artifacts
+        # Copies Tauri's native output into a flat staging/ directory using the
+        # exact public release filenames. Native output paths are preserved on
+        # disk; staging only copies/renames. The Linux .deb keeps its internal
+        # lowercase package identity — only the published filename is branded.
         shell: bash
-        run: echo "dir=target/release/bundle" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          BUNDLE="target/release/bundle"
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cp "$BUNDLE"/nsis/*-setup.exe "staging/ANDRII_1.0.0_x64-setup.exe"
+            cp "$BUNDLE"/msi/*.msi        "staging/ANDRII_1.0.0_x64_en-US.msi"
+          fi
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            cp "$BUNDLE"/appimage/*.AppImage "staging/ANDRII_1.0.0_x64.AppImage"
+            cp "$BUNDLE"/deb/*.deb           "staging/ANDRII_1.0.0_amd64.deb"
+          fi
+          echo "Staged artifacts:"
+          ls -la staging/
+
+      - name: Verify staged branded artifacts + per-platform checksums
+        # Branded mode requires the exact public filenames and rejects any
+        # unexpected release-type files. Per-platform SHA256SUMS is written from
+        # the final staged (branded) names.
+        run: node scripts/verify-release-artifacts.mjs --platform ${{ matrix.platform }} --branded --dir staging --out staging/SHA256SUMS-${{ matrix.platform }}.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: |
-            ${{ steps.bundle.outputs.dir }}/**/*.exe
-            ${{ steps.bundle.outputs.dir }}/**/*.msi
-            ${{ steps.bundle.outputs.dir }}/**/*.deb
-            ${{ steps.bundle.outputs.dir }}/**/*.AppImage
-            ${{ steps.bundle.outputs.dir }}/**/SHA256SUMS.txt
+          path: staging/*
           if-no-files-found: error
           retention-days: 14
 
@@ -178,19 +201,24 @@ jobs:
           path: downloaded
           merge-multiple: true
 
-      - name: Flatten artifacts into a single release directory
+      - name: Flatten branded artifacts into a single release directory
+        # Copies only the staged branded filenames (ANDRII_*); per-platform
+        # SHA256SUMS-* intermediates are intentionally left behind so only the
+        # four public artifacts reach the release directory.
         run: |
           mkdir -p release
           find downloaded -type f \( \
-            -name '*.exe' -o \
-            -name '*.msi' -o \
-            -name '*.AppImage' -o \
-            -name '*.deb' \
+            -name 'ANDRII_*.exe' -o \
+            -name 'ANDRII_*.msi' -o \
+            -name 'ANDRII_*.AppImage' -o \
+            -name 'ANDRII_*.deb' \
           \) -exec cp {} release/ \;
           ls -la release/
 
-      - name: Verify all four artifacts + write combined SHA256SUMS.txt
-        run: node scripts/verify-release-artifacts.mjs --platform all --dir release --out release/SHA256SUMS.txt
+      - name: Verify all four branded artifacts + write combined SHA256SUMS.txt
+        # Branded mode over platform "all" — exact public filenames only, no
+        # extras. SHA256SUMS.txt references only the branded final names.
+        run: node scripts/verify-release-artifacts.mjs --platform all --branded --dir release --out release/SHA256SUMS.txt
 
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2

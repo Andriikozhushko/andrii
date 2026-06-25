@@ -12,19 +12,23 @@ Two Linux packages are produced:
 
 | Package | Type | Best for |
 |---|---|---|
-| `andrii-app_1.0.0_amd64.deb` | Debian/Ubuntu installer | Desktop integration + `.andrii` file association (Ubuntu 22.04 / 24.04, Debian 12+) |
-| `andrii-app_1.0.0_amd64.AppImage` | Portable single-file | Distros without `.deb`, portable use, no install |
+| `ANDRII_1.0.0_amd64.deb` | Debian/Ubuntu installer | Desktop integration + `.andrii` file association (Ubuntu 22.04 / 24.04, Debian 12+) |
+| `ANDRII_1.0.0_x64.AppImage` | Portable single-file | Distros without `.deb`, portable use, no install |
+
+> The published filenames are branded (`ANDRII_*`). The internal package
+> identity registered with `apt` remains the lowercase `andrii-app`, so
+> `apt-get remove andrii-app` still works after installing the `.deb`.
 
 ---
 
 ## Installing the `.deb` (Ubuntu / Debian)
 
 ```bash
-# 1. Download andrii-app_1.0.0_amd64.deb and SHA256SUMS.txt from the release.
+# 1. Download ANDRII_1.0.0_amd64.deb and SHA256SUMS.txt from the release.
 # 2. Verify the checksum (recommended):
 sha256sum -c SHA256SUMS.txt --ignore-missing
 # 3. Install:
-sudo apt-get install -y ./andrii-app_1.0.0_amd64.deb
+sudo apt-get install -y ./ANDRII_1.0.0_amd64.deb
 #    (apt resolves the runtime deps: libwebkit2gtk-4.1-0, libgtk-3-0)
 ```
 
@@ -48,13 +52,13 @@ sudo apt-get remove andrii-app
 ## Running the `.AppImage` (portable)
 
 ```bash
-# 1. Download andrii-app_1.0.0_amd64.AppImage and SHA256SUMS.txt.
+# 1. Download ANDRII_1.0.0_x64.AppImage and SHA256SUMS.txt.
 # 2. Verify:
 sha256sum -c SHA256SUMS.txt --ignore-missing
 # 3. Make executable:
-chmod +x andrii-app_1.0.0_amd64.AppImage
+chmod +x ANDRII_1.0.0_x64.AppImage
 # 4. Run:
-./andrii-app_1.0.0_amd64.AppImage
+./ANDRII_1.0.0_x64.AppImage
 ```
 
 The AppImage bundles the application and its libraries (except the system
@@ -110,12 +114,19 @@ The workflow `.github/workflows/release-build.yml` builds on `ubuntu-22.04`:
 1. Installs Linux build dependencies (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`,
    `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`, …).
 2. Runs `cargo test --workspace --exclude andrii-app`.
-3. Runs `npm run tauri build`, producing `deb` and `appimage` bundles.
-4. Runs `scripts/verify-release-artifacts.mjs --platform linux` to confirm both
-   artifacts exist, are non-zero, and to compute per-platform SHA-256 checksums.
-5. Uploads the artifacts. On tag builds, a `release` job combines both
-  platforms' artifacts, verifies all four, writes `SHA256SUMS.txt`, and attaches
-   everything to a **draft** GitHub Release.
+3. Runs `npm run tauri build`, producing `deb` and `appimage` bundles under
+   their native names (`andrii-app_1.0.0_amd64.*`).
+4. Runs `scripts/verify-release-artifacts.mjs --platform linux` (native mode) to
+   confirm both native artifacts exist and are non-zero.
+5. Stages the native output into a flat `staging/` directory under the branded
+   public filenames (`ANDRII_1.0.0_x64.AppImage`, `ANDRII_1.0.0_amd64.deb`),
+   then runs the verifier in `--branded` mode and writes a per-platform
+   `SHA256SUMS-linux.txt` from the branded names.
+6. Uploads the branded staged artifacts. On tag builds, a `release` job
+   downloads both platforms' staged artifacts, flattens only the `ANDRII_*`
+   branded files, verifies all four in branded mode, writes a combined
+   `SHA256SUMS.txt` referencing only the branded names, and attaches everything
+   to a **draft** GitHub Release.
 
 ---
 

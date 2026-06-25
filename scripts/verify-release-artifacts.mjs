@@ -6,17 +6,32 @@
 // and writes a SHA256SUMS.txt file. Fails with an actionable error if an
 // expected artifact is missing.
 //
+// Two name modes:
+//   native  (default) — match Tauri's native output by extension pattern
+//                       (*-setup.exe, *.msi, *.AppImage, *.deb). Used in the
+//                       build jobs immediately after `tauri build`, before
+//                       staging.
+//   branded (--branded) — require the exact public release filenames
+//                       (ANDRII_1.0.0_x64-setup.exe, ANDRII_1.0.0_x64_en-US.msi,
+//                        ANDRII_1.0.0_x64.AppImage, ANDRII_1.0.0_amd64.deb).
+//                       Used after the staging step and in the release-
+//                       aggregation job. Fails if any unexpected release-type
+//                       file is present, so only the branded names reach
+//                       SHA256SUMS.txt and the GitHub Release.
+//
 // Uses only Node built-ins (no dependencies).
 //
 // Usage:
-//   node scripts/verify-release-artifacts.mjs                    # auto-detect platform, scan target/release/bundle
-//   node scripts/verify-release-artifacts.mjs --platform windows # expect NSIS + MSI
-//   node scripts/verify-release-artifacts.mjs --platform linux   # expect AppImage + DEB
-//   node scripts/verify-release-artifacts.mjs --platform all     # expect all four (release combine)
+//   node scripts/verify-release-artifacts.mjs                    # native mode, auto-detect platform, scan target/release/bundle
+//   node scripts/verify-release-artifacts.mjs --platform windows # native mode: expect NSIS + MSI
+//   node scripts/verify-release-artifacts.mjs --platform linux   # native mode: expect AppImage + DEB
+//   node scripts/verify-release-artifacts.mjs --platform all     # native mode: expect all four
+//   node scripts/verify-release-artifacts.mjs --branded          # branded mode: require exact public filenames
 //   node scripts/verify-release-artifacts.mjs --dir <path>       # scan a different directory (recursive)
 //   node scripts/verify-release-artifacts.mjs --out <file>       # write SHA256SUMS to this path
 //   node scripts/verify-release-artifacts.mjs --checksums-only   # checksum whatever is found, don't fail on missing expected
 //   node scripts/verify-release-artifacts.mjs --expect-missing   # invert: succeed only if at least one expected artifact is absent (controlled missing-artifact test)
+//   node scripts/verify-release-artifacts.mjs --help             # show this usage and exit
 
 import { createHash } from "node:crypto";
 import { readdirSync, statSync, writeFileSync, existsSync, readFileSync } from "node:fs";
@@ -26,6 +41,33 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
 
+const VERSION = "1.0.0";
+
+// Exact public release filenames — what users download from GitHub Releases.
+// These are the staged names; native Tauri output is renamed to these before
+// this list is consulted in branded mode.
+const BRANDED = {
+  windows: [
+    { name: `ANDRII_${VERSION}_x64-setup.exe`, label: "NSIS setup EXE" },
+    { name: `ANDRII_${VERSION}_x64_en-US.msi`, label: "MSI installer" },
+  ],
+  linux: [
+    { name: `ANDRII_${VERSION}_x64.AppImage`, label: "AppImage" },
+    { name: `ANDRII_${VERSION}_amd64.deb`,     label: "Debian package" },
+  ],
+};
+
+// Native Tauri output matched by extension pattern (build-job verification,
+// before staging). Tolerates minor suffix/locale variations in Tauri's names.
+const NATIVE = [
+  { kind: "nsis",     platforms: ["windows", "all"], test: (n) => /-setup\.exe$/i.test(n), label: "NSIS setup EXE" },
+  { kind: "msi",      platforms: ["windows", "all"], test: (n) => /\.msi$/i.test(n),       label: "MSI installer" },
+  { kind: "appimage", platforms: ["linux", "all"],   test: (n) => /\.appimage$/i.test(n),  label: "AppImage" },
+  { kind: "deb",      platforms: ["linux", "all"],   test: (n) => /\.deb$/i.test(n),       label: "Debian package" },
+];
+
+const RELEASE_EXT = /\.(exe|msi|appimage|deb|dmg|snap|rpm)$/i;
+
 // --- arg parsing -----------------------------------------------------------
 const args = process.argv.slice(2);
 function getFlag(name) {
@@ -34,9 +76,31 @@ function getFlag(name) {
 }
 const hasFlag = (name) => args.includes(`--${name}`);
 
+if (hasFlag("help")) {
+  const usage = [
+    "Usage: node scripts/verify-release-artifacts.mjs [options]",
+    "",
+    "Options:",
+    "  --platform <windows|linux|all>  Which artifacts to expect (default: auto-detect)",
+    "  --branded                       Require exact public release filenames (post-staging / release job)",
+    "  --dir <path>                    Scan a different directory recursively (default: target/release/bundle)",
+    "  --out <file>                    Write SHA256SUMS to this path (default: <scan-dir>/SHA256SUMS.txt)",
+    "  --checksums-only                Checksum whatever is found; do not fail on missing expected artifacts",
+    "  --expect-missing                Invert: succeed only if at least one expected artifact is absent",
+    "  --help                          Show this help and exit",
+    "",
+    "Name modes:",
+    "  native (default)  Match Tauri output by extension pattern (build jobs, pre-staging)",
+    "  branded (--branded) Require exact public filenames ANDRII_<ver>_... (post-staging, release job)",
+  ].join("\n");
+  console.log(usage);
+  process.exit(0);
+}
+
 const platformArg = getFlag("platform");
 const dirArg = getFlag("dir");
 const outArg = getFlag("out");
+const branded = hasFlag("branded");
 const checksumsOnly = hasFlag("checksums-only");
 const expectMissing = hasFlag("expect-missing");
 
@@ -48,15 +112,9 @@ function defaultPlatform() {
 }
 const platform = defaultPlatform();
 
-// --- expected artifact definitions -----------------------------------------
-const EXPECTED = [
-  { kind: "nsis",     platforms: ["windows", "all"], test: (n) => /-setup\.exe$/i.test(n), label: "NSIS setup EXE" },
-  { kind: "msi",      platforms: ["windows", "all"], test: (n) => /\.msi$/i.test(n),       label: "MSI installer" },
-  { kind: "appimage", platforms: ["linux", "all"],   test: (n) => /\.appimage$/i.test(n),  label: "AppImage" },
-  { kind: "deb",      platforms: ["linux", "all"],   test: (n) => /\.deb$/i.test(n),       label: "Debian package" },
-];
-
-const expectedFor = (plat) => EXPECTED.filter((e) => e.platforms.includes(plat));
+const brandedFor = (plat) =>
+  plat === "all" ? [...BRANDED.windows, ...BRANDED.linux] : (BRANDED[plat] || []);
+const nativeFor = (plat) => NATIVE.filter((e) => e.platforms.includes(plat));
 
 // --- helpers ---------------------------------------------------------------
 function scanDir(dir) {
@@ -89,49 +147,71 @@ const scanRoot = dirArg
 
 const allFiles = scanDir(scanRoot);
 const candidates = allFiles.filter((f) => !/SHA256SUMS/i.test(basename(f)));
-const expected = expectedFor(platform);
-
-const found = new Map();
-for (const e of expected) found.set(e.kind, candidates.filter((f) => e.test(basename(f))));
 
 console.log(`ANDRII release artifact verification`);
 console.log(`  platform : ${platform}`);
+console.log(`  mode     : ${branded ? "branded (exact public filenames)" : "native (Tauri output patterns)"}`);
 console.log(`  scan dir : ${scanRoot}`);
 console.log(`  files    : ${candidates.length} candidate(s)\n`);
 
 const lines = [];
 const missing = [];
 const empty = [];
+const unexpected = [];
 
-for (const e of expected) {
-  const hits = found.get(e.kind) || [];
-  if (hits.length === 0) {
-    missing.push(e);
-    console.log(`  [MISSING] ${e.label} (${e.kind})`);
-    continue;
+if (branded) {
+  const expected = brandedFor(platform);
+  const expectedNames = new Set(expected.map((e) => e.name.toLowerCase()));
+  for (const e of expected) {
+    const hits = candidates.filter((f) => basename(f).toLowerCase() === e.name.toLowerCase());
+    if (hits.length === 0) {
+      missing.push({ label: e.label, kind: e.name });
+      console.log(`  [MISSING] ${e.label} — expected ${e.name}`);
+      continue;
+    }
+    for (const path of hits) {
+      const size = statSync(path).size;
+      const hash = sha256OfFile(path);
+      console.log(`  [OK]      ${e.label.padEnd(16)} ${humanSize(size).padStart(10)}  ${hash.slice(0, 12)}…  ${relative(scanRoot, path)}`);
+      lines.push(`${hash}  ${basename(path)}`);
+      if (size === 0) empty.push({ label: e.label, path });
+    }
   }
-  for (const path of hits) {
-    const size = statSync(path).size;
-    const hash = sha256OfFile(path);
-    console.log(`  [OK]      ${e.label.padEnd(16)} ${humanSize(size).padStart(10)}  ${hash.slice(0, 12)}…  ${relative(scanRoot, path)}`);
-    lines.push(`${hash}  ${basename(path)}`);
+  // In branded mode, no other release-type files may be present — only the
+  // branded public filenames may reach SHA256SUMS.txt and the GitHub Release.
+  for (const path of candidates) {
+    const name = basename(path);
+    if (RELEASE_EXT.test(name) && !expectedNames.has(name.toLowerCase())) {
+      unexpected.push(path);
+      console.log(`  [UNEXPECTED] ${name}`);
+    }
   }
-}
-
-// Checksum extra plausible release files not in the expected set.
-for (const path of candidates) {
-  if (expected.some((e) => e.test(basename(path)))) continue;
-  if (/\.(exe|msi|appimage|deb|dmg|snap|rpm)$/i.test(basename(path))) {
-    const size = statSync(path).size;
-    const hash = sha256OfFile(path);
-    console.log(`  [EXTRA]   ${"".padEnd(16)} ${humanSize(size).padStart(10)}  ${hash.slice(0, 12)}…  ${relative(scanRoot, path)}`);
-    lines.push(`${hash}  ${basename(path)}`);
+} else {
+  const expected = nativeFor(platform);
+  for (const e of expected) {
+    const hits = candidates.filter((f) => e.test(basename(f)));
+    if (hits.length === 0) {
+      missing.push({ label: e.label, kind: e.kind });
+      console.log(`  [MISSING] ${e.label} (${e.kind})`);
+      continue;
+    }
+    for (const path of hits) {
+      const size = statSync(path).size;
+      const hash = sha256OfFile(path);
+      console.log(`  [OK]      ${e.label.padEnd(16)} ${humanSize(size).padStart(10)}  ${hash.slice(0, 12)}…  ${relative(scanRoot, path)}`);
+      lines.push(`${hash}  ${basename(path)}`);
+      if (size === 0) empty.push({ label: e.label, path });
+    }
   }
-}
-
-for (const e of expected) {
-  for (const path of found.get(e.kind) || []) {
-    if (statSync(path).size === 0) empty.push({ e, path });
+  // Checksum extra plausible release files not in the expected set (native mode only).
+  for (const path of candidates) {
+    if (expected.some((e) => e.test(basename(path)))) continue;
+    if (RELEASE_EXT.test(basename(path))) {
+      const size = statSync(path).size;
+      const hash = sha256OfFile(path);
+      console.log(`  [EXTRA]   ${"".padEnd(16)} ${humanSize(size).padStart(10)}  ${hash.slice(0, 12)}…  ${relative(scanRoot, path)}`);
+      lines.push(`${hash}  ${basename(path)}`);
+    }
   }
 }
 
@@ -157,16 +237,23 @@ if (checksumsOnly) process.exit(0);
 
 if (empty.length > 0) {
   console.error(`\nFAIL: ${empty.length} expected artifact(s) are zero bytes:`);
-  for (const { e, path } of empty) console.error(`  - ${e.label}: ${path}`);
+  for (const { label, path } of empty) console.error(`  - ${label}: ${path}`);
+  process.exit(1);
+}
+
+if (unexpected.length > 0) {
+  console.error(`\nFAIL: ${unexpected.length} unexpected release artifact(s) present in branded mode (only branded public filenames allowed):`);
+  for (const path of unexpected) console.error(`  - ${basename(path)}`);
+  console.error(`\nStaging must produce only the branded filenames. Do not publish; inspect the staging directory.`);
   process.exit(1);
 }
 
 if (missing.length > 0) {
-  console.error(`\nFAIL: ${missing.length} expected artifact(s) missing for platform "${platform}":`);
-  for (const e of missing) console.error(`  - ${e.label} (${e.kind})`);
+  console.error(`\nFAIL: ${missing.length} expected artifact(s) missing for platform "${platform}" (${branded ? "branded" : "native"} mode):`);
+  for (const e of missing) console.error(`  - ${e.label}${e.kind ? ` (${e.kind})` : ""}`);
   console.error(`\nThe build did not produce the required release artifact(s). Do not publish; inspect the build log.`);
   process.exit(1);
 }
 
-console.log(`\nOK: all expected artifacts for platform "${platform}" present and non-zero.`);
+console.log(`\nOK: all expected artifacts for platform "${platform}" present and non-zero (${branded ? "branded" : "native"} mode).`);
 process.exit(0);
