@@ -48,13 +48,13 @@ export default function TitleBar({ canvasState, activeSettings, onNavigate }: Ti
 
   return (
     <div className="title-bar" onMouseDown={handleDragRegionMouseDown}>
-      {/* hand-drawn logo (black ink on white → multiply onto parchment) */}
+      {/* full-color dripping wordmark (transparent PNG) */}
       <div className="flex items-center pl-4 pr-5 h-full cursor-move">
         <img
           src="/andrii-logo.png"
           alt="ANDRII"
           draggable={false}
-          className="h-9 w-auto mix-blend-multiply pointer-events-none select-none"
+          className="h-11 w-auto pointer-events-none select-none"
         />
       </div>
 

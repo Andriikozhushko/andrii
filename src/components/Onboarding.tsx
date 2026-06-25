@@ -19,7 +19,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
     <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-8 bg-bg animate-fade-in"
       style={{
         backgroundImage:
-          "radial-gradient(1100px 520px at 18% -8%, rgba(46,94,115,0.07), transparent 60%)," +
+          "radial-gradient(1100px 520px at 18% -8%, rgba(156,74,42,0.07), transparent 60%)," +
           "radial-gradient(900px 480px at 100% 0%, rgba(178,58,53,0.04), transparent 58%)",
       }}>
       <div className="w-full max-w-md text-center animate-scale-in">

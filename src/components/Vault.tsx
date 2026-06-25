@@ -26,7 +26,7 @@ export type VaultState =
 export type VaultTone = "neutral" | "safe" | "danger";
 
 const C = {
-  WAX: "#B23A35", SAFE: "#3E7D5A", ACCENT: "#2E5E73",
+  WAX: "#B23A35", SAFE: "#3E7D5A", ACCENT: "#9C4A2A",
 };
 
 /* Which artwork represents each state. */

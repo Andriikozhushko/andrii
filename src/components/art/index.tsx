@@ -11,7 +11,7 @@ const PARCH = "#F3ECDD";
 const PAPER = "#FBF7EE";
 const WAX = "#B23A35";
 const WAX_DEEP = "#8E2B27";
-const ACCENT = "#2E5E73";
+const ACCENT = "#9C4A2A";
 const SAFE = "#3E7D5A";
 
 type ArtProps = { size?: number; className?: string };
